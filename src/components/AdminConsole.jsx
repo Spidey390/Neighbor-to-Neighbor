@@ -19,6 +19,7 @@ export default function AdminConsole({ user }) {
   const [flagsList, setFlagsList] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [allUsersList, setAllUsersList] = useState([]);
+  const [stats, setStats] = useState(null);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [erasureSearch, setErasureSearch] = useState("");
@@ -75,10 +76,23 @@ export default function AdminConsole({ user }) {
     }
   };
 
+  const loadStats = async () => {
+    try {
+      const res = await fetch("/api/admin/stats", {
+        headers: { Authorization: `Bearer mock-${user.id}` }
+      });
+      const data = await res.json();
+      if (res.ok) setStats(data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     loadPendingUsers();
     loadFlags();
     loadAllUsers();
+    loadStats();
     if (activeSubTab === "audit") {
       loadAuditLogs(searchQuery);
     }
@@ -217,29 +231,55 @@ export default function AdminConsole({ user }) {
         <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
            <h3 className="text-sm font-bold text-gray-600 mb-2">Pending Verifications</h3>
            <div className="flex items-baseline gap-3">
-              <span className="text-3xl font-black text-gray-950">{pendingUsers.length || 42}</span>
-              <span className="text-sm font-bold text-red-600 flex items-center"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-0.5"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg> 12%</span>
+              <span className="text-3xl font-black text-gray-950">
+                {stats ? stats.pendingVerifications : pendingUsers.length}
+              </span>
+              {stats && stats.pendingVerifications > 0 && (
+                <span className="text-sm font-bold text-red-600 flex items-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-0.5"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+                  Needs action
+                </span>
+              )}
            </div>
         </div>
         <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
            <h3 className="text-sm font-bold text-gray-600 mb-2">Active Disputes</h3>
            <div className="flex items-baseline gap-3">
-              <span className="text-3xl font-black text-gray-950">{flagsList.length < 10 && flagsList.length > 0 ? `0${flagsList.length}` : flagsList.length || '08'}</span>
-              <span className="text-sm font-bold text-emerald-600 flex items-center"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-0.5"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/></svg> 4%</span>
+              <span className="text-3xl font-black text-gray-950">
+                {stats != null
+                  ? (stats.activeDisputes < 10 ? `0${stats.activeDisputes}` : stats.activeDisputes)
+                  : (flagsList.length < 10 ? `0${flagsList.length}` : flagsList.length)}
+              </span>
+              {stats && stats.activeDisputes === 0 && (
+                <span className="text-sm font-bold text-emerald-600">Clear</span>
+              )}
            </div>
         </div>
         <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
            <h3 className="text-sm font-bold text-gray-600 mb-2">Audit Events (24h)</h3>
            <div className="flex items-baseline gap-3">
-              <span className="text-3xl font-black text-gray-950">1,204</span>
-              <span className="text-sm font-bold text-gray-500">Normal</span>
+              <span className="text-3xl font-black text-gray-950">
+                {stats != null ? stats.auditEvents24h.toLocaleString() : auditLogs.length.toLocaleString()}
+              </span>
+              <span className="text-sm font-bold text-gray-500">
+                {stats && stats.auditEvents24h === 0 ? "Quiet" : "Normal"}
+              </span>
            </div>
         </div>
         <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
            <h3 className="text-sm font-bold text-gray-600 mb-2">GDPR Requests</h3>
            <div className="flex items-baseline gap-3">
-              <span className="text-3xl font-black text-gray-950">03</span>
-              <span className="bg-amber-700 text-amber-50 text-[10px] font-black px-2 py-1 rounded uppercase tracking-wider">CRITICAL</span>
+              <span className="text-3xl font-black text-gray-950">
+                {stats != null
+                  ? (stats.gdprRequests < 10 ? `0${stats.gdprRequests}` : stats.gdprRequests)
+                  : "00"}
+              </span>
+              {stats && stats.gdprRequests > 0 && (
+                <span className="bg-amber-700 text-amber-50 text-[10px] font-black px-2 py-1 rounded uppercase tracking-wider">CRITICAL</span>
+              )}
+              {stats && stats.gdprRequests === 0 && (
+                <span className="bg-emerald-100 text-emerald-700 text-[10px] font-black px-2 py-1 rounded uppercase tracking-wider">CLEAR</span>
+              )}
            </div>
         </div>
       </div>

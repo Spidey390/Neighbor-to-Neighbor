@@ -49,7 +49,30 @@ adminRouter.post("/flags", requireAuth, async (req, res) => {
   }
 });
 
-// 2. Admin: List pending verification users (Admin only)
+// 2. Admin: Real-time dashboard stats
+adminRouter.get("/stats", requireAuth, requireRoles(["admin"]), async (req, res) => {
+  try {
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    const [pendingSnap, flagsSnap, auditSnap, gdprSnap] = await Promise.all([
+      usersCol.where("verificationStatus", "==", "pending").get(),
+      flagsCol.where("status", "==", "pending").get(),
+      auditLogCol.where("timestamp", ">=", since24h).get(),
+      usersCol.where("gdprDeletionRequested", "==", true).get()
+    ]);
+
+    res.json({
+      pendingVerifications: pendingSnap.size,
+      activeDisputes: flagsSnap.size,
+      auditEvents24h: auditSnap.size,
+      gdprRequests: gdprSnap.size
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 3. Admin: List pending verification users (Admin only)
 adminRouter.get("/pending-users", requireAuth, requireRoles(["admin"]), async (req, res) => {
   try {
     const snapshot = await usersCol.where("verificationStatus", "==", "pending").get();
