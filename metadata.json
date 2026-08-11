@@ -1,0 +1,8 @@
+{
+  "name": "Neighbor-to-Neighbor",
+  "description": "A localized assistance platform connecting elderly residents with nearby community volunteers for everyday tasks.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

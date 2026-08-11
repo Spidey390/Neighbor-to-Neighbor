@@ -1,0 +1,13 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+private-uploads/
+.env*
+!.env.example
+# Firebase and Google Cloud service-account credentials
+service-account.json
+service-account*.json
+*-service-account.json
