@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import LocationPickerMap from "./LocationPickerMap";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import {
+  Accessibility,
   ArrowRight,
   Check,
   Compass,
@@ -67,8 +68,6 @@ export default function CompleteProfileForm({ user, onComplete }) {
 
   const [identityProofType, setIdentityProofType] = useState("");
   const [identityProof, setIdentityProof] = useState(null);
-  const [idProofSource, setIdProofSource] = useState("file");
-  const [driveUrl, setDriveUrl] = useState("");
 
   const toggleSkill = (skill) => {
     if (selectedSkills.includes(skill)) {
@@ -105,12 +104,8 @@ export default function CompleteProfileForm({ user, onComplete }) {
       setError("Please select an identity proof type.");
       return;
     }
-    if (idProofSource === "file" && !identityProof) {
+    if (!identityProof) {
       setError("Please upload an identity proof file.");
-      return;
-    }
-    if (idProofSource === "drive" && !driveUrl) {
-      setError("Please enter a Google Drive link.");
       return;
     }
 
@@ -118,82 +113,41 @@ export default function CompleteProfileForm({ user, onComplete }) {
     setError("");
 
     try {
-      let response;
-      if (idProofSource === "file" && identityProof) {
-        const formData = new FormData();
-        formData.append("id", user.id);
-        formData.append("personalDetails", JSON.stringify({
-          age: ageNum || 25,
-          hasDisability: isVolunteer ? true : isDisability,
-          mobileNumber: mobileNumber || user.phoneNumber || "",
-          address,
-          city,
-          postalCode,
-          identityProofType,
-          emergencyContactName: isVolunteer ? undefined : emergencyContactName,
-          emergencyContactPhone: isVolunteer ? undefined : emergencyContactPhone
-        }));
-        formData.append("latitude", lat);
-        formData.append("longitude", lng);
-        if (isVolunteer) {
-          formData.append("skillTags", JSON.stringify(selectedSkills));
-          formData.append("radiusPreference", radius);
-        }
-        formData.append("identityProof", identityProof);
-
-        response = await fetch("/api/auth/complete-profile", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer mock-${user.id}`
-          },
-          body: formData
-        });
-      } else {
-        const payload = {
-          id: user.id,
-          personalDetails: JSON.stringify({
-            age: ageNum || 25,
-            hasDisability: isVolunteer ? true : isDisability,
-            mobileNumber: mobileNumber || user.phoneNumber || "",
-            address,
-            city,
-            postalCode,
-            identityProofType,
-            emergencyContactName: isVolunteer ? undefined : emergencyContactName,
-            emergencyContactPhone: isVolunteer ? undefined : emergencyContactPhone
-          }),
-          age: ageNum || 25,
-          hasDisability: isVolunteer ? true : isDisability,
-          mobileNumber: mobileNumber || user.phoneNumber || "",
-          address,
-          city,
-          postalCode,
-          identityProofType,
-          latitude: parseFloat(lat),
-          longitude: parseFloat(lng),
-          emergencyContact: isVolunteer ? undefined : { name: emergencyContactName, phone: emergencyContactPhone },
-          skillTags: isVolunteer ? selectedSkills : undefined,
-          radiusPreference: isVolunteer ? parseFloat(radius) : undefined,
-          driveUrl: driveUrl || undefined,
-          identityProofUrl: driveUrl || "uploaded-file-mock-url"
-        };
-
-        response = await fetch("/api/auth/complete-profile", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer mock-${user.id}`
-          },
-          body: JSON.stringify(payload)
-        });
+      const formData = new FormData();
+      formData.append("id", user.id);
+      formData.append("personalDetails", JSON.stringify({
+        age: ageNum || 25,
+        hasDisability: isVolunteer ? true : isDisability,
+        mobileNumber: mobileNumber || user.phoneNumber || "",
+        address,
+        city,
+        postalCode,
+        identityProofType,
+        emergencyContactName: isVolunteer ? undefined : emergencyContactName,
+        emergencyContactPhone: isVolunteer ? undefined : emergencyContactPhone
+      }));
+      formData.append("latitude", lat);
+      formData.append("longitude", lng);
+      if (isVolunteer) {
+        formData.append("skillTags", JSON.stringify(selectedSkills));
+        formData.append("radiusPreference", radius);
       }
+      formData.append("identityProof", identityProof);
+
+      const response = await fetch("/api/auth/complete-profile", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer mock-${user.id}`
+        },
+        body: formData
+      });
 
       const data = await response.json();
-      if (response.ok) {
-        onComplete(data.user);
-      } else {
-        setError(data.error || "Failed to submit profile.");
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to complete profile.");
       }
+
+      onComplete(data.user);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -205,8 +159,8 @@ export default function CompleteProfileForm({ user, onComplete }) {
     <div className="min-h-screen bg-slate-50/60 py-10 px-4 sm:px-6 lg:px-8 font-sans">
       {/* Top Header Nav */}
       <header className="max-w-4xl mx-auto mb-8 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-indigo-700 font-bold text-lg">
-          <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-md shadow-indigo-200">
+        <div className="flex items-center gap-2.5 text-[#263c2e] font-bold text-lg font-serif">
+          <div className="p-2 bg-[#263c2e] text-white rounded-xl shadow-md">
             <ShieldCheck size={22} />
           </div>
           <span>{t("appName")}</span>
@@ -215,8 +169,8 @@ export default function CompleteProfileForm({ user, onComplete }) {
         <div className="flex items-center gap-2">
           <span className={`px-3 py-1 rounded-full text-xs font-bold border ${
             isVolunteer
-              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-              : "bg-indigo-50 text-indigo-700 border-indigo-200"
+              ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+              : "bg-emerald-50 text-emerald-800 border-emerald-200"
           }`}>
             {isVolunteer ? "🤝 Volunteer Profile" : "🏠 Senior Resident Profile"}
           </span>
@@ -226,9 +180,9 @@ export default function CompleteProfileForm({ user, onComplete }) {
       <main className="max-w-4xl mx-auto space-y-6">
         {/* Hero Title Container */}
         <div className="bg-white border border-gray-200/80 rounded-3xl p-6 sm:p-8 shadow-sm text-center relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-indigo-50 to-emerald-50 rounded-full blur-2xl -z-10"></div>
+          <div className="absolute top-0 right-0 w-40 h-40 bg-emerald-50/60 rounded-full blur-2xl -z-10"></div>
           
-          <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-medium text-gray-900 tracking-tight font-serif">
             {t("completeProfileTitle")}
           </h1>
           <p className="text-sm text-gray-500 font-medium mt-2 max-w-xl mx-auto">
@@ -247,14 +201,14 @@ export default function CompleteProfileForm({ user, onComplete }) {
           {/* SECTION 01: PERSONAL DETAILS */}
           <section className="bg-white border border-gray-200/80 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 hover:shadow-md transition-all">
             <div className="flex items-center gap-3 pb-4 border-b border-gray-100">
-              <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-2xl font-bold">
+              <div className="p-2.5 bg-emerald-50 text-emerald-800 rounded-2xl font-bold">
                 <User size={20} />
               </div>
               <div>
-                <span className="text-[11px] font-bold text-indigo-600 tracking-wider uppercase">
+                <span className="text-[11px] font-bold text-emerald-800 tracking-wider uppercase">
                   01 · Personal Details
                 </span>
-                <h2 className="text-lg font-black text-gray-900">Basic Information</h2>
+                <h2 className="text-lg font-serif font-semibold text-gray-900">Basic Information</h2>
               </div>
             </div>
 
@@ -278,11 +232,26 @@ export default function CompleteProfileForm({ user, onComplete }) {
                 </div>
               </div>
 
+              {/* Mobile Phone Number */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">
+                  {t("phone")}
+                </label>
+                <input
+                  type="tel"
+                  required
+                  value={mobileNumber}
+                  onChange={(e) => setMobileNumber(e.target.value)}
+                  className="block w-full px-4 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-700/20 focus:border-[#263c2e] transition-all bg-white"
+                  placeholder="+91 98765 43210"
+                />
+              </div>
+
               {/* Age Field */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-xs font-bold text-gray-700 uppercase">
-                    Age (Years) <span className="text-red-500">*</span>
+                    Age (Years)
                   </label>
                   {isVolunteer ? (
                     <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[11px] font-bold">
@@ -302,54 +271,66 @@ export default function CompleteProfileForm({ user, onComplete }) {
                   value={age}
                   onChange={(e) => setAge(e.target.value)}
                   placeholder={isVolunteer ? "e.g. 23" : "e.g. 60"}
-                  className="block w-full px-4 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-600 transition-all bg-white"
+                  className="block w-full h-[46px] px-4 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-700/20 focus:border-[#263c2e] transition-all bg-white"
                 />
+              </div>
 
-                {/* Disability Toggle for Senior Residents */}
-                {!isVolunteer && (
-                  <div className="space-y-2 mt-2.5">
-                    <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl flex items-center gap-2.5">
-                      <input
-                        id="comp-disability"
-                        type="checkbox"
-                        checked={isDisability}
-                        onChange={(e) => setIsDisability(e.target.checked)}
-                        className="h-4 w-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer"
-                      />
-                      <label htmlFor="comp-disability" className="text-xs font-bold text-gray-800 cursor-pointer select-none">
-                        ♿ {t("personWithDisability")} <span className="text-gray-500 font-normal">(Age restriction waived)</span>
-                      </label>
-                    </div>
-
-                    {age !== "" && !isDisability && parseInt(age, 10) <= 58 && (
-                      <p className="text-xs text-red-600 font-bold mt-1">⚠️ Not eligible: Age must be above 58 years for Senior Residents.</p>
-                    )}
-                    {age !== "" && isDisability && parseInt(age, 10) <= 58 && (
-                      <p className="text-xs text-emerald-700 font-bold mt-1">✅ Age restriction waived for Person with Disability.</p>
+              {/* Disability Toggle for Senior Residents */}
+              {!isVolunteer ? (
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold text-gray-700 uppercase">
+                      Special Eligibility
+                    </label>
+                    {isDisability ? (
+                      <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-[11px] font-bold">
+                        Age Waived
+                      </span>
+                    ) : (
+                      <span className="px-2.5 py-0.5 bg-gray-50 text-gray-500 border border-gray-200 rounded-full text-[11px] font-medium">
+                        Optional
+                      </span>
                     )}
                   </div>
-                )}
-              </div>
+                  <div
+                    onClick={() => setIsDisability(!isDisability)}
+                    className={`w-full h-[46px] px-4 rounded-xl border transition-all flex items-center justify-between cursor-pointer select-none ${
+                      isDisability
+                        ? "border-[#263c2e] bg-[#edf3ed] shadow-2xs"
+                        : "border-gray-300 bg-white hover:border-gray-400 hover:bg-gray-50/60"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Accessibility size={18} className={isDisability ? "text-[#263c2e]" : "text-gray-500"} />
+                      <span className="text-sm font-bold text-gray-900">{t("personWithDisability")}</span>
+                    </div>
+                    <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all ${
+                      isDisability ? "bg-[#263c2e] border-[#263c2e] text-white" : "border-gray-300 bg-white"
+                    }`}>
+                      {isDisability && <Check size={14} strokeWidth={3} />}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
-              {/* Mobile Phone Number */}
-              <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">
-                  {t("phone")} <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="tel"
-                  required
-                  value={mobileNumber}
-                  onChange={(e) => setMobileNumber(e.target.value)}
-                  className="block w-full px-4 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-600 transition-all bg-white"
-                  placeholder="+91 98765 43210"
-                />
-              </div>
+              {/* Age Restriction Alert Banners */}
+              {!isVolunteer && age !== "" && !isDisability && parseInt(age, 10) <= 58 && (
+                <div className="sm:col-span-2 p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs font-bold text-red-600 flex items-center gap-2">
+                  <span>⚠️</span>
+                  <span>Not eligible: Senior Resident registration is allowed for individuals above 58 years of age only.</span>
+                </div>
+              )}
+              {!isVolunteer && age !== "" && isDisability && parseInt(age, 10) <= 58 && (
+                <div className="sm:col-span-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-800 flex items-center gap-2">
+                  <span>✅</span>
+                  <span>Age restriction waived for Person with Disability.</span>
+                </div>
+              )}
 
-              {/* Full Address */}
-              <div>
+              {/* Full Street Address */}
+              <div className="sm:col-span-2">
                 <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">
-                  Full Street Address <span className="text-red-500">*</span>
+                  Full Street Address
                 </label>
                 <input
                   type="text"
@@ -357,14 +338,14 @@ export default function CompleteProfileForm({ user, onComplete }) {
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   placeholder="e.g. #42 3rd Main Street, Indiranagar"
-                  className="block w-full px-4 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-600 transition-all bg-white"
+                  className="block w-full px-4 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-700/20 focus:border-[#263c2e] transition-all bg-white"
                 />
               </div>
 
               {/* City */}
               <div>
                 <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">
-                  City <span className="text-red-500">*</span>
+                  City
                 </label>
                 <input
                   type="text"
@@ -372,14 +353,14 @@ export default function CompleteProfileForm({ user, onComplete }) {
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
                   placeholder="e.g. Bangalore"
-                  className="block w-full px-4 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-600 transition-all bg-white"
+                  className="block w-full px-4 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-700/20 focus:border-[#263c2e] transition-all bg-white"
                 />
               </div>
 
               {/* Postal Code */}
               <div>
                 <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">
-                  Postal Code <span className="text-red-500">*</span>
+                  Postal Code
                 </label>
                 <input
                   type="text"
@@ -387,7 +368,7 @@ export default function CompleteProfileForm({ user, onComplete }) {
                   value={postalCode}
                   onChange={(e) => setPostalCode(e.target.value)}
                   placeholder="e.g. 560038"
-                  className="block w-full px-4 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-600 transition-all bg-white"
+                  className="block w-full px-4 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-700/20 focus:border-[#263c2e] transition-all bg-white"
                 />
               </div>
 
@@ -396,7 +377,7 @@ export default function CompleteProfileForm({ user, onComplete }) {
                 <>
                   <div>
                     <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">
-                      Emergency Contact Name <span className="text-red-500">*</span>
+                      Emergency Contact Name
                     </label>
                     <input
                       type="text"
@@ -404,13 +385,13 @@ export default function CompleteProfileForm({ user, onComplete }) {
                       value={emergencyContactName}
                       onChange={(e) => setEmergencyContactName(e.target.value)}
                       placeholder="e.g. Son / Relative Name"
-                      className="block w-full px-4 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-600 transition-all bg-white"
+                      className="block w-full px-4 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-700/20 focus:border-[#263c2e] transition-all bg-white"
                     />
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">
-                      {t("emergencyContact")} <span className="text-red-500">*</span>
+                      {t("emergencyContact")}
                     </label>
                     <input
                       type="tel"
@@ -418,7 +399,7 @@ export default function CompleteProfileForm({ user, onComplete }) {
                       value={emergencyContactPhone}
                       onChange={(e) => setEmergencyContactPhone(e.target.value)}
                       placeholder="e.g. +91 98765 00000"
-                      className="block w-full px-4 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-600 transition-all bg-white"
+                      className="block w-full px-4 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-700/20 focus:border-[#263c2e] transition-all bg-white"
                     />
                   </div>
                 </>
@@ -430,14 +411,14 @@ export default function CompleteProfileForm({ user, onComplete }) {
           {isVolunteer && (
             <section className="bg-white border border-gray-200/80 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 hover:shadow-md transition-all">
               <div className="flex items-center gap-3 pb-4 border-b border-gray-100">
-                <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-2xl font-bold">
+                <div className="p-2.5 bg-emerald-50 text-emerald-800 rounded-2xl font-bold">
                   <Compass size={20} />
                 </div>
                 <div>
-                  <span className="text-[11px] font-bold text-emerald-600 tracking-wider uppercase">
+                  <span className="text-[11px] font-bold text-emerald-800 tracking-wider uppercase">
                     02 · Volunteer Preferences
                   </span>
-                  <h2 className="text-lg font-black text-gray-900">Skills & Service Radius</h2>
+                  <h2 className="text-lg font-serif font-semibold text-gray-900">Skills & Service Radius</h2>
                 </div>
               </div>
 
@@ -447,7 +428,7 @@ export default function CompleteProfileForm({ user, onComplete }) {
                     <label className="block text-xs font-bold text-gray-700 uppercase">
                       Preferred Travel Radius
                     </label>
-                    <span className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-full">
+                    <span className="text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
                       Current: {radius} km
                     </span>
                   </div>
@@ -457,7 +438,7 @@ export default function CompleteProfileForm({ user, onComplete }) {
                     max="15"
                     value={radius}
                     onChange={(e) => setRadius(e.target.value)}
-                    className="w-full accent-indigo-600 h-2 bg-gray-200 rounded-lg cursor-pointer"
+                    className="w-full accent-emerald-700 h-2 bg-gray-200 rounded-lg cursor-pointer"
                   />
                   <div className="flex justify-between text-[11px] text-gray-400 font-semibold mt-1">
                     <span>1 km</span>
@@ -472,7 +453,7 @@ export default function CompleteProfileForm({ user, onComplete }) {
                     Assisted Skills & Services
                   </label>
                   <div className="flex flex-wrap gap-2.5">
-                    {["Groceries", "Fix something", "Phone/computer help", "Companionship", "Medical transport", "Gardening"].map((skill) => {
+                    {["Health & Medicine", "Shopping & Essentials", "Food & Meals", "Home Help", "Transportation", "Technology Help", "Companionship", "Urgent Help"].map((skill) => {
                       const active = selectedSkills.includes(skill);
                       return (
                         <button
@@ -481,8 +462,8 @@ export default function CompleteProfileForm({ user, onComplete }) {
                           onClick={() => toggleSkill(skill)}
                           className={`py-2.5 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
                             active
-                              ? "bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-200"
-                              : "bg-white text-gray-700 border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/30"
+                              ? "bg-[#263c2e] text-white border-[#263c2e] shadow-sm"
+                              : "bg-white text-gray-700 border-gray-200 hover:border-emerald-300 hover:bg-emerald-50/50"
                           }`}
                         >
                           {active ? `✓ ${skill}` : `+ ${skill}`}
@@ -498,14 +479,14 @@ export default function CompleteProfileForm({ user, onComplete }) {
           {/* SECTION 03 / 02: NEIGHBORHOOD LOCATION */}
           <section className="bg-white border border-gray-200/80 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 hover:shadow-md transition-all">
             <div className="flex items-center gap-3 pb-4 border-b border-gray-100">
-              <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-2xl font-bold">
+              <div className="p-2.5 bg-emerald-50 text-emerald-800 rounded-2xl font-bold">
                 <MapPin size={20} />
               </div>
               <div>
-                <span className="text-[11px] font-bold text-indigo-600 tracking-wider uppercase">
+                <span className="text-[11px] font-bold text-emerald-800 tracking-wider uppercase">
                   {isVolunteer ? "03" : "02"} · Neighborhood Location
                 </span>
-                <h2 className="text-lg font-black text-gray-900">Pin Your Area</h2>
+                <h2 className="text-lg font-serif font-semibold text-gray-900">Pin Your Area</h2>
               </div>
             </div>
 
@@ -527,21 +508,21 @@ export default function CompleteProfileForm({ user, onComplete }) {
           {/* SECTION 04 / 03: IDENTITY PROOF DOCUMENT */}
           <section className="bg-white border border-gray-200/80 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 hover:shadow-md transition-all">
             <div className="flex items-center gap-3 pb-4 border-b border-gray-100">
-              <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-2xl font-bold">
+              <div className="p-2.5 bg-emerald-50 text-emerald-800 rounded-2xl font-bold">
                 <FileCheck2 size={20} />
               </div>
               <div>
-                <span className="text-[11px] font-bold text-indigo-600 tracking-wider uppercase">
+                <span className="text-[11px] font-bold text-emerald-800 tracking-wider uppercase">
                   {isVolunteer ? "04" : "03"} · Verification
                 </span>
-                <h2 className="text-lg font-black text-gray-900">Identity Proof Document</h2>
+                <h2 className="text-lg font-serif font-semibold text-gray-900">Identity Proof Document</h2>
               </div>
             </div>
 
             <div className="space-y-5">
               <div>
                 <label className="block text-xs font-bold text-gray-700 uppercase mb-3">
-                  Select Document Type <span className="text-red-500">*</span>
+                  Select Document Type
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {["Aadhaar Card", "Voter ID", "Passport", "Driving License"].map((type) => {
@@ -556,7 +537,7 @@ export default function CompleteProfileForm({ user, onComplete }) {
                         }}
                         className={`p-3.5 rounded-2xl border-2 text-xs font-bold transition-all text-center cursor-pointer ${
                           active
-                            ? "border-indigo-600 bg-indigo-50/70 text-indigo-950 shadow-xs ring-2 ring-indigo-500/20"
+                            ? "border-[#263c2e] bg-emerald-50/70 text-emerald-950 shadow-xs ring-2 ring-emerald-700/20"
                             : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50"
                         }`}
                       >
@@ -568,69 +549,28 @@ export default function CompleteProfileForm({ user, onComplete }) {
               </div>
 
               {identityProofType && (
-                <div className="p-5 bg-indigo-50/40 border border-indigo-100 rounded-2xl space-y-4 animate-fade-in">
-                  <label className="block text-xs font-bold text-gray-800 uppercase">
-                    Provide Document ({identityProofType})
+                <div className="p-5 bg-emerald-50/40 border border-emerald-100 rounded-2xl space-y-3 animate-fade-in">
+                  <label className="block text-xs font-bold text-gray-800 uppercase" htmlFor="identity-file-input">
+                    Upload Document File ({identityProofType})
                   </label>
 
-                  <div className="flex gap-4">
-                    <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-gray-800">
-                      <input
-                        type="radio"
-                        name="idProofSource"
-                        value="file"
-                        checked={idProofSource === "file"}
-                        onChange={() => setIdProofSource("file")}
-                        className="accent-indigo-600"
-                      />
-                      <span>📁 Upload File (Image / PDF)</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-gray-800">
-                      <input
-                        type="radio"
-                        name="idProofSource"
-                        value="drive"
-                        checked={idProofSource === "drive"}
-                        onChange={() => setIdProofSource("drive")}
-                        className="accent-indigo-600"
-                      />
-                      <span>🔗 Google Drive / Cloud Link</span>
-                    </label>
+                  <div>
+                    <input
+                      id="identity-file-input"
+                      type="file"
+                      accept="image/*,.pdf"
+                      onChange={(e) => {
+                        setIdentityProof(e.target.files[0] || null);
+                        if (error) setError("");
+                      }}
+                      className="block w-full text-xs text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#263c2e] file:text-white hover:file:bg-[#172b1e] cursor-pointer border border-gray-300 rounded-xl p-2 bg-white"
+                    />
+                    {identityProof && (
+                      <p className="text-xs text-emerald-800 font-bold mt-2.5 flex items-center gap-1.5 bg-emerald-50 p-2.5 rounded-xl border border-emerald-200">
+                        <span>✓</span> Selected file: {identityProof.name}
+                      </p>
+                    )}
                   </div>
-
-                  {idProofSource === "file" ? (
-                    <div>
-                      <input
-                        id="identity-file-input"
-                        type="file"
-                        accept="image/*,.pdf"
-                        onChange={(e) => {
-                          setIdentityProof(e.target.files[0] || null);
-                          if (error) setError("");
-                        }}
-                        className="block w-full text-xs text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-600 file:text-white hover:file:bg-indigo-700 cursor-pointer border border-gray-300 rounded-xl p-2 bg-white"
-                      />
-                      {identityProof && (
-                        <p className="text-xs text-emerald-700 font-bold mt-2 flex items-center gap-1.5 bg-emerald-50 p-2.5 rounded-xl border border-emerald-200">
-                          <span>✓</span> Selected file: {identityProof.name}
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <div>
-                      <input
-                        id="identity-drive-input"
-                        type="url"
-                        placeholder="https://drive.google.com/file/d/..."
-                        value={driveUrl}
-                        onChange={(e) => {
-                          setDriveUrl(e.target.value);
-                          if (error) setError("");
-                        }}
-                        className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-600 outline-none bg-white"
-                      />
-                    </div>
-                  )}
                 </div>
               )}
             </div>
@@ -646,7 +586,7 @@ export default function CompleteProfileForm({ user, onComplete }) {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full sm:w-auto px-8 py-4 rounded-2xl shadow-lg text-base font-bold text-white bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full sm:w-auto px-8 py-4 rounded-2xl shadow-md text-base font-bold text-white bg-[#263c2e] hover:bg-[#172b1e] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-800 transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
             >
               <span>{isSubmitting ? t("saving") : t("saveProfile")}</span>
               {!isSubmitting && <ArrowRight size={18} />}

@@ -1,3 +1,4 @@
+import { GoogleGenAI } from "@google/genai";
 import { Router } from "express";
 import { db, tasksCol, usersCol, locationsCol, taskClaimsCol, auditLogCol } from "../db/index.js";
 import { requireAuth, requireRoles } from "./auth.js";
@@ -25,6 +26,178 @@ function roundLocation(lat, lon) {
     longitude: Math.round(lon * 1000) / 1000
   };
 }
+
+function fallbackRuleBasedParser(prompt) {
+  const lower = (prompt || "").toLowerCase();
+  
+  let category = "Shopping & Essentials";
+  let urgency = "Medium";
+
+  if (
+    lower.includes("urgent") || lower.includes("emergency") || lower.includes("avasiyam") ||
+    lower.includes("அவசரம்") || lower.includes("துரிதம்") || lower.includes("உடனே") ||
+    lower.includes("விழுந்து") || lower.includes("அடிபட்டு") || lower.includes("immediately") ||
+    lower.includes("help fast") || lower.includes("sos") || lower.includes("fell down") || lower.includes("fall")
+  ) {
+    urgency = "High";
+  }
+
+  if (
+    lower.includes("medicine") || lower.includes("doctor") || lower.includes("hospital") || lower.includes("pill") ||
+    lower.includes("tablet") || lower.includes("மருந்து") || lower.includes("டாக்டர்") || lower.includes("ஆஸ்பத்திரி") || lower.includes("दवा")
+  ) {
+    category = "Health & Medicine";
+  } else if (
+    lower.includes("food") || lower.includes("meal") || lower.includes("dinner") || lower.includes("lunch") ||
+    lower.includes("hotel") || lower.includes("சாப்பாடு") || lower.includes("உணவு") || lower.includes("खाना")
+  ) {
+    category = "Food & Meals";
+  } else if (
+    lower.includes("repair") || lower.includes("tap") || lower.includes("fix") || lower.includes("plumb") ||
+    lower.includes("light") || lower.includes("பழுது") || lower.includes("வேலை")
+  ) {
+    category = "Home Help";
+  } else if (
+    lower.includes("ride") || lower.includes("drive") || lower.includes("car") || lower.includes("transport") ||
+    lower.includes("பயணம்") || lower.includes("வண்டி")
+  ) {
+    category = "Transportation";
+  } else if (
+    lower.includes("phone") || lower.includes("mobile") || lower.includes("computer") || lower.includes("wifi") ||
+    lower.includes("tech") || lower.includes("போன்") || lower.includes("மொபைல்")
+  ) {
+    category = "Technology Help";
+  } else if (
+    lower.includes("talk") || lower.includes("chat") || lower.includes("companion") || lower.includes("walk") ||
+    lower.includes("பேச") || lower.includes("துணை")
+  ) {
+    category = "Companionship";
+  } else if (urgency === "High") {
+    category = "Urgent Help";
+  }
+
+  return {
+    category,
+    description: prompt.trim(),
+    urgency,
+    detectedLanguage: "auto"
+  };
+}
+
+async function parseRequestWithAI(promptText, userLang = "auto") {
+  const groqApiKey = process.env.GROQ_API_KEY;
+  const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+
+  // 1. Try Groq AI Engine (High-speed Llama-3.3 70B Multilingual AI Model)
+  if (groqApiKey) {
+    try {
+      const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${groqApiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          messages: [
+            {
+              role: "system",
+              content: `You are an AI assistant for a community mutual-aid platform called "Neighbor-to-Neighbor".
+Auto-detect the language of the resident's input text (e.g. Tamil, Hindi, English, Kannada, Telugu, etc.).
+Analyze the request and return ONLY a valid JSON object with the following schema:
+{
+  "category": "Health & Medicine" | "Shopping & Essentials" | "Food & Meals" | "Home Help" | "Transportation" | "Technology Help" | "Companionship" | "Urgent Help",
+  "description": "Clear, polite request description in English summarizing the user's need.",
+  "urgency": "High" | "Medium" | "Low",
+  "detectedLanguage": "Detected Language Name (e.g., Tamil, English, Hindi, etc.)"
+}
+
+Rules:
+- Category MUST be exactly one of: "Health & Medicine", "Shopping & Essentials", "Food & Meals", "Home Help", "Transportation", "Technology Help", "Companionship", "Urgent Help".
+- Urgency: "High" if immediate/urgent/emergency/severe/fell down/injury/blood, "Low" if flexible, otherwise "Medium".`
+            },
+            {
+              role: "user",
+              content: promptText
+            }
+          ],
+          temperature: 0.1,
+          response_format: { type: "json_object" }
+        })
+      });
+
+      if (groqRes.ok) {
+        const data = await groqRes.json();
+        const content = data.choices?.[0]?.message?.content;
+        if (content) {
+          const parsed = JSON.parse(content);
+          if (parsed.category && parsed.description) {
+            console.log("[Groq AI] Successfully parsed request:", parsed);
+            return parsed;
+          }
+        }
+      } else {
+        const errorText = await groqRes.text();
+        console.warn("Groq AI returned non-200 status:", groqRes.status, errorText);
+      }
+    } catch (groqErr) {
+      console.warn("Groq AI call error, trying Gemini fallback:", groqErr.message);
+    }
+  }
+
+  // 2. Fallback to Gemini AI Model
+  if (geminiApiKey) {
+    try {
+      const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+      const prompt = `
+You are an AI assistant for a community mutual-aid platform called "Neighbor-to-Neighbor".
+A resident entered a request in language: ${userLang}.
+Input text: "${promptText}"
+
+Analyze the request using your NLP intelligence and return ONLY a valid JSON object with the following schema:
+{
+  "category": "Health & Medicine" | "Shopping & Essentials" | "Food & Meals" | "Home Help" | "Transportation" | "Technology Help" | "Companionship" | "Urgent Help",
+  "description": "Clear, polite request description in English summarizing the user's need.",
+  "urgency": "High" | "Medium" | "Low"
+}
+`;
+      const response = await ai.models.generateContent({
+        model: "gemini-1.5-flash",
+        contents: prompt
+      });
+
+      const text = response.text;
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.category && parsed.description) {
+          return parsed;
+        }
+      }
+    } catch (geminiErr) {
+      console.warn("Gemini AI error, using local AI engine fallback:", geminiErr.message);
+    }
+  }
+
+  // 3. Fallback to Local NLP Engine
+  return fallbackRuleBasedParser(promptText);
+}
+
+// AI Endpoint: Parse resident prompt in English or native language
+tasksRouter.post("/ai-parse", requireAuth, async (req, res) => {
+  const { text, language } = req.body;
+  if (!text || !text.trim()) {
+    return res.status(400).json({ error: "Please enter or speak your request." });
+  }
+
+  try {
+    const parsed = await parseRequestWithAI(text.trim(), language || "auto");
+    return res.json({ success: true, parsed });
+  } catch (err) {
+    console.error("Error parsing AI request:", err);
+    return res.status(500).json({ error: "Failed to parse request with AI: " + err.message });
+  }
+});
 
 // 1. Post a request (Resident role only)
 tasksRouter.post("/", requireAuth, requireRoles(["resident"]), async (req, res) => {

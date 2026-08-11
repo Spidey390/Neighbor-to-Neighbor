@@ -1,13 +1,98 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import CompleteProfileForm from "./CompleteProfileForm";
-import { Home, Plus, ArrowLeft, Send, CheckCircle2, Phone, Star, ShieldAlert, MessageCircle, Video, Mic } from "lucide-react";
+import {
+  Home,
+  Plus,
+  ArrowLeft,
+  Send,
+  CheckCircle2,
+  Phone,
+  Star,
+  ShieldAlert,
+  MessageCircle,
+  Video,
+  Mic,
+  MicOff,
+  Sparkles,
+  Volume2,
+  Loader2,
+  Languages,
+  Bot,
+  Pill,
+  ShoppingBag,
+  UtensilsCrossed,
+  Wrench,
+  Car,
+  Smartphone,
+  HeartHandshake,
+  Siren
+} from "lucide-react";
 import VideoCall from "./VideoCall.jsx";
 import ChatPanel from "./ChatPanel.jsx";
 import VoiceRequest from "./VoiceRequest.jsx";
 import { useLanguage } from "../context/LanguageContext.jsx";
 
+export const REQUEST_CATEGORIES = [
+  {
+    id: "Health & Medicine",
+    title: "Health & Medicine",
+    icon: Pill,
+    desc: "Prescriptions, medical supplies & doctor visits",
+    color: "bg-emerald-50 hover:bg-emerald-100/80 text-[#263c2e] border border-emerald-200 hover:border-emerald-400"
+  },
+  {
+    id: "Shopping & Essentials",
+    title: "Shopping & Essentials",
+    icon: ShoppingBag,
+    desc: "Groceries, household supplies & essentials",
+    color: "bg-emerald-50 hover:bg-emerald-100/80 text-[#263c2e] border border-emerald-200 hover:border-emerald-400"
+  },
+  {
+    id: "Food & Meals",
+    title: "Food & Meals",
+    icon: UtensilsCrossed,
+    desc: "Prepared meals, food prep & package pickups",
+    color: "bg-emerald-50 hover:bg-emerald-100/80 text-[#263c2e] border border-emerald-200 hover:border-emerald-400"
+  },
+  {
+    id: "Home Help",
+    title: "Home Help",
+    icon: Wrench,
+    desc: "Basic repairs, plumbing, gardening & chores",
+    color: "bg-emerald-50 hover:bg-emerald-100/80 text-[#263c2e] border border-emerald-200 hover:border-emerald-400"
+  },
+  {
+    id: "Transportation",
+    title: "Transportation",
+    icon: Car,
+    desc: "Rides to clinics, markets or local errands",
+    color: "bg-emerald-50 hover:bg-emerald-100/80 text-[#263c2e] border border-emerald-200 hover:border-emerald-400"
+  },
+  {
+    id: "Technology Help",
+    title: "Technology Help",
+    icon: Smartphone,
+    desc: "Phone, computer, Wi-Fi & app assistance",
+    color: "bg-emerald-50 hover:bg-emerald-100/80 text-[#263c2e] border border-emerald-200 hover:border-emerald-400"
+  },
+  {
+    id: "Companionship",
+    title: "Companionship",
+    icon: HeartHandshake,
+    desc: "Friendly chats, walks & social visits",
+    color: "bg-emerald-50 hover:bg-emerald-100/80 text-[#263c2e] border border-emerald-200 hover:border-emerald-400"
+  },
+  {
+    id: "Urgent Help",
+    title: "Urgent Help",
+    icon: Siren,
+    desc: "Immediate priority assistance & urgent needs",
+    color: "bg-rose-50 hover:bg-rose-100/80 text-rose-950 border border-rose-200 hover:border-rose-400 font-bold"
+  }
+];
+
 export default function ResidentDashboard({ user, tasks, onReload, onLogout, socket }) {
-  const { t } = useLanguage();
+  const { t, language: appLanguage } = useLanguage();
   if (user.verificationStatus === "incomplete") {
     return <CompleteProfileForm user={user} onComplete={(updatedUser) => window.location.reload()} />;
   }
@@ -29,9 +114,191 @@ export default function ResidentDashboard({ user, tasks, onReload, onLogout, soc
   const [submittingRating, setSubmittingRating] = useState(false);
   const [error, setError] = useState("");
 
-  // Communication states
-  const [showCall, setShowCall] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
+  // AI Request Assistant State
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [isAiListening, setIsAiListening] = useState(false);
+  const [aiParsing, setAiParsing] = useState(false);
+  const [aiParsedResult, setAiParsedResult] = useState(null);
+  const [aiError, setAiError] = useState("");
+  const [autoSubmitCountdown, setAutoSubmitCountdown] = useState(null);
+
+  const autoSubmitTimerRef = useRef(null);
+  const latestPromptRef = useRef("");
+
+  useEffect(() => {
+    latestPromptRef.current = aiPrompt;
+  }, [aiPrompt]);
+
+  const cancelAutoSubmitTimer = () => {
+    if (autoSubmitTimerRef.current) {
+      clearInterval(autoSubmitTimerRef.current);
+      autoSubmitTimerRef.current = null;
+    }
+    setAutoSubmitCountdown(null);
+  };
+
+  const start5SecAutoSubmitTimer = (textToSubmit) => {
+    cancelAutoSubmitTimer();
+
+    const targetText = textToSubmit || latestPromptRef.current;
+    if (!targetText || !targetText.trim()) return;
+
+    let count = 5;
+    setAutoSubmitCountdown(5);
+
+    autoSubmitTimerRef.current = setInterval(() => {
+      count -= 1;
+      if (count > 0) {
+        setAutoSubmitCountdown(count);
+      } else {
+        clearInterval(autoSubmitTimerRef.current);
+        autoSubmitTimerRef.current = null;
+        setAutoSubmitCountdown(null);
+        handleAiParseRequest(targetText);
+      }
+    }, 1000);
+  };
+
+  const startSpeechToText = () => {
+    cancelAutoSubmitTimer();
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setAiError("Speech recognition is not supported in this browser. You can type your request instead!");
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      // Synchronized directly with top header language pill toggle (English vs தமிழ்)
+      recognition.lang = appLanguage === "ta" ? "ta-IN" : "en-IN";
+      recognition.interimResults = true;
+      recognition.continuous = false;
+
+      setIsAiListening(true);
+      setAiError("");
+      let capturedText = "";
+
+      recognition.onresult = (event) => {
+        let transcript = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        capturedText = transcript;
+        setAiPrompt(transcript);
+      };
+
+      recognition.onerror = (event) => {
+        console.error("Speech recognition error", event.error);
+        setIsAiListening(false);
+        if (event.error !== "no-speech") {
+          setAiError("Audio input error: " + event.error);
+        }
+      };
+
+      recognition.onend = () => {
+        setIsAiListening(false);
+        const textToUse = capturedText || latestPromptRef.current;
+        if (textToUse && textToUse.trim()) {
+          start5SecAutoSubmitTimer(textToUse);
+        }
+      };
+
+      recognition.start();
+    } catch (e) {
+      console.error(e);
+      setIsAiListening(false);
+    }
+  };
+
+  const handleAiParseRequest = async (overridePrompt) => {
+    cancelAutoSubmitTimer();
+    const textToAnalyze = (typeof overridePrompt === "string" ? overridePrompt : aiPrompt).trim();
+    if (!textToAnalyze) {
+      setAiError("Please type or speak your request first.");
+      return;
+    }
+
+    setAiParsing(true);
+    setAiError("");
+    setAiParsedResult(null);
+
+    try {
+      const activeUserId = user?.id || user?.uid || "resident-1";
+      const targetLang = appLanguage === "ta" ? "ta-IN" : "en-IN";
+      const res = await fetch("/api/tasks/ai-parse", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer mock-${activeUserId}`
+        },
+        body: JSON.stringify({ text: textToAnalyze, language: targetLang })
+      });
+
+      const responseText = await res.text();
+      let data = {};
+      try {
+        data = responseText ? JSON.parse(responseText) : {};
+      } catch (e) {
+        throw new Error("Server error: " + responseText.slice(0, 100));
+      }
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to analyze request with AI.");
+      }
+
+      setAiParsedResult(data.parsed);
+      setCategory(data.parsed.category || "Shopping & Essentials");
+      setDescription(data.parsed.description || textToAnalyze);
+      setUrgency(data.parsed.urgency || "Medium");
+    } catch (err) {
+      setAiError(err.message);
+    } finally {
+      setAiParsing(false);
+    }
+  };
+
+  const handleConfirmAiTask = async () => {
+    if (!aiParsedResult) return;
+    setSubmittingTask(true);
+    setAiError("");
+
+    try {
+      const activeUserId = user?.id || user?.uid || "resident-1";
+      const response = await fetch("/api/tasks", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer mock-${activeUserId}`
+        },
+        body: JSON.stringify({
+          category: aiParsedResult.category,
+          description: aiParsedResult.description,
+          urgency: aiParsedResult.urgency
+        })
+      });
+
+      const responseText = await response.text();
+      let data = {};
+      try {
+        data = responseText ? JSON.parse(responseText) : {};
+      } catch (e) {
+        throw new Error("Server error: " + responseText.slice(0, 100));
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to post request.");
+      }
+
+      setAiPrompt("");
+      setAiParsedResult(null);
+      setView("confirm");
+      onReload();
+    } catch (err) {
+      setAiError(err.message);
+    } finally {
+      setSubmittingTask(false);
+    }
+  };
 
   // Join task rooms for assigned tasks
   useEffect(() => {
@@ -221,30 +488,32 @@ export default function ResidentDashboard({ user, tasks, onReload, onLogout, soc
         {/* VIEW A: HOME SCREEN */}
         {view === "home" &&
           <div className="space-y-8 animate-fade-in" id="res-view-home">
-            {/* Primary Action Button */}
-            <div className="flex justify-center py-4">
-              {user.verificationStatus !== "approved" ?
+            {/* Primary Action Buttons */}
+            <div className="flex flex-col sm:flex-row justify-center items-center gap-4 py-2">
+              {user.verificationStatus !== "approved" ? (
                 <div className="bg-amber-50 border border-amber-300 rounded-2xl p-6 text-center max-w-xl space-y-3 shadow-inner">
                   <h3 className="text-xl font-bold text-amber-950">{t("unverified")}</h3>
                   <p className="text-base text-amber-900 font-medium">
                     Our local neighborhood team is verifying your details to protect community safety.
                   </p>
-                </div> :
-
-                <button
-                  onClick={() => {
-                    setError("");
-                    setCategory("");
-                    setDescription("");
-                    setView("create_step1");
-                  }}
-                  className="w-full max-w-lg bg-amber-600 hover:bg-amber-700 text-white font-black text-xl rounded-2xl py-6 px-8 shadow-md hover:shadow-lg transition-all transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-3 cursor-pointer min-h-[70px]"
-                  id="btn-ask-help">
-
-                  <Plus size={28} strokeWidth={3} />
-                  <span>{t("createRequestBtn")}</span>
-                </button>
-              }
+                </div>
+              ) : (
+                <div className="w-full flex justify-center py-2">
+                  <button
+                    onClick={() => {
+                      setAiError("");
+                      setAiPrompt("");
+                      setAiParsedResult(null);
+                      setView("ai_request");
+                    }}
+                    className="w-full max-w-lg bg-[#263c2e] hover:bg-[#1b2b21] text-white font-black text-xl rounded-2xl py-5 px-8 shadow-md hover:shadow-lg transition-all transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-3 cursor-pointer min-h-[66px]"
+                    id="btn-ai-request"
+                  >
+                    <Plus size={28} strokeWidth={3} />
+                    <span>{t("createRequestBtn")}</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* List of Requests */}
@@ -322,6 +591,191 @@ export default function ResidentDashboard({ user, tasks, onReload, onLogout, soc
           </div>
         }
 
+        {/* VIEW: AI SMART VOICE & TEXT REQUEST */}
+        {view === "ai_request" && (
+          <div className="space-y-4 animate-fade-in max-w-md mx-auto" id="res-view-ai">
+            {/* Header & Back Button */}
+            <div className="space-y-1.5 border-b border-gray-200 pb-2.5">
+              <button
+                onClick={() => {
+                  setView("home");
+                  setAiParsedResult(null);
+                  setAiError("");
+                }}
+                className="inline-flex items-center gap-1 text-[#263c2e] hover:text-[#1b2b21] font-bold text-xs uppercase tracking-wider focus:outline-none cursor-pointer"
+              >
+                <ArrowLeft size={14} strokeWidth={2.5} />
+                <span>Back</span>
+              </button>
+
+              <h2 className="text-2xl sm:text-3xl font-serif font-bold text-[#263c2e]">
+                Describe What You Need
+              </h2>
+            </div>
+
+            {aiError && (
+              <div className="bg-red-50 border-l-4 border-red-500 text-red-950 p-3 rounded-xl text-xs font-bold flex items-center gap-2">
+                <span>⚠️</span>
+                <span>{aiError}</span>
+              </div>
+            )}
+
+            {autoSubmitCountdown !== null && (
+              <div className="bg-emerald-100/90 border border-emerald-400 text-[#263c2e] px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-between shadow-sm animate-pulse">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-ping shrink-0"></span>
+                  <span>Voice recorded! Auto-moving to next step in <strong className="text-sm font-black underline">{autoSubmitCountdown}s</strong>...</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={cancelAutoSubmitTimer}
+                  className="px-2.5 py-1 bg-white hover:bg-emerald-50 border border-emerald-300 text-[#263c2e] text-[11px] font-extrabold rounded-lg transition-all cursor-pointer shadow-2xs"
+                >
+                  Pause
+                </button>
+              </div>
+            )}
+
+            {!aiParsedResult ? (
+              <div className="bg-white border border-emerald-200/80 rounded-2xl p-5 shadow-xs space-y-4">
+                {/* Dark Forest Green Microphone Button */}
+                <div className="flex flex-col items-center justify-center pt-1 pb-0.5 text-center">
+                  <button
+                    type="button"
+                    onClick={startSpeechToText}
+                    className={`w-18 h-18 rounded-full flex items-center justify-center transition-all cursor-pointer shadow-md ${
+                      isAiListening
+                        ? "bg-red-600 text-white animate-pulse ring-6 ring-red-200"
+                        : "bg-[#263c2e] hover:bg-[#1b2b21] text-white hover:scale-105 active:scale-95 ring-4 ring-emerald-100/80"
+                    }`}
+                  >
+                    {isAiListening ? <MicOff size={32} /> : <Mic size={32} strokeWidth={2.5} className="text-white" />}
+                  </button>
+
+                  <span className="text-[11px] font-extrabold uppercase text-[#263c2e] tracking-wider mt-2.5">
+                    {isAiListening ? "Listening... Speak Now" : "TAP MICROPHONE TO SPEAK"}
+                  </span>
+                </div>
+
+                {/* Divider: OR TYPE BELOW */}
+                <div className="relative flex py-0.5 items-center">
+                  <div className="flex-grow border-t border-emerald-200/60"></div>
+                  <span className="flex-shrink mx-3 text-[10px] font-extrabold text-[#263c2e]/70 uppercase tracking-wider">
+                    OR TYPE BELOW
+                  </span>
+                  <div className="flex-grow border-t border-emerald-200/60"></div>
+                </div>
+
+                {/* Light Emerald Textarea Box */}
+                <div>
+                  <textarea
+                    rows={3}
+                    value={aiPrompt}
+                    onChange={(e) => setAiPrompt(e.target.value)}
+                    placeholder="E.g., I need help fixing a leaky pipe in my kitchen, or I'm looking for someone to walk my dog..."
+                    className="w-full bg-emerald-50/40 border border-emerald-200/80 rounded-xl p-3 text-xs sm:text-sm font-medium text-gray-900 placeholder-gray-500 outline-none focus:ring-2 focus:ring-emerald-700/20 focus:border-[#263c2e] transition-all"
+                  />
+                </div>
+
+                {/* Submit Action Button */}
+                <button
+                  type="button"
+                  onClick={handleAiParseRequest}
+                  disabled={aiParsing || !aiPrompt.trim()}
+                  className="w-full py-3.5 bg-[#263c2e] hover:bg-[#1b2b21] text-white font-extrabold text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 min-h-[50px] border border-emerald-800/40"
+                >
+                  {aiParsing ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin text-emerald-300" />
+                      <span>Analyzing Request...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={18} className="text-amber-300" />
+                      <span>Analyze & Auto-Detect Request</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            ) : (
+              /* AI Parsed Result Confirmation Card */
+              <div className="bg-white border-2 border-emerald-300 rounded-3xl p-6 sm:p-8 shadow-md space-y-6 animate-fade-in">
+                <div className="flex items-center gap-3 pb-4 border-b border-gray-100">
+                  <div className="p-2.5 bg-emerald-100 text-emerald-900 rounded-2xl font-bold">
+                    <Sparkles size={22} className="text-emerald-700" />
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-black text-emerald-800 tracking-wider uppercase">
+                      AI Extraction Result
+                    </span>
+                    <h3 className="text-xl font-serif font-bold text-gray-900">Review Automated Details</h3>
+                  </div>
+                </div>
+
+                <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-2xl p-5 space-y-4">
+                  {aiParsedResult.detectedLanguage && (
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-emerald-200/60 pb-3">
+                      <span className="text-xs font-bold text-gray-500 uppercase">Detected Speaking Language</span>
+                      <span className="text-xs font-black text-emerald-950 bg-emerald-100/90 px-3 py-1 rounded-full border border-emerald-300">
+                        🌐 {aiParsedResult.detectedLanguage}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-emerald-200/60 pb-3">
+                    <span className="text-xs font-bold text-gray-500 uppercase">Detected Category</span>
+                    <span className="text-sm font-black text-[#263c2e] bg-white px-3 py-1 rounded-full border border-emerald-300 shadow-2xs">
+                      🏷️ {aiParsedResult.category}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-emerald-200/60 pb-3">
+                    <span className="text-xs font-bold text-gray-500 uppercase">Urgency Priority</span>
+                    <span className={`text-xs font-black px-3 py-1 rounded-full uppercase ${getUrgencyBadgeClass(aiParsedResult.urgency)}`}>
+                      ⚡ {aiParsedResult.urgency} Priority
+                    </span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <span className="text-xs font-bold text-gray-500 uppercase">Synthesized Request Description</span>
+                    <p className="text-base font-bold text-gray-900 bg-white p-3.5 rounded-xl border border-emerald-200">
+                      "{aiParsedResult.description}"
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setAiParsedResult(null)}
+                    className="py-3.5 px-5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-2xl text-sm font-bold transition-all cursor-pointer"
+                  >
+                    ✏️ Edit Input
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleConfirmAiTask}
+                    disabled={submittingTask}
+                    className="flex-1 py-4 bg-[#263c2e] hover:bg-[#1c2e23] text-white font-bold text-base rounded-2xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {submittingTask ? (
+                      <>
+                        <Loader2 size={20} className="animate-spin" />
+                        <span>Posting Request...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>🚀 Confirm & Post Request Now</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* WIZARD STEP 1: CHOOSE CATEGORY */}
         {view === "create_step1" &&
           <div className="space-y-6 animate-fade-in" id="res-view-step1">
@@ -338,33 +792,25 @@ export default function ResidentDashboard({ user, tasks, onReload, onLogout, soc
               <p className="text-gray-600 text-lg">Tap on one of the large categories below:</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-              <button
-                onClick={() => handleSelectCategory("Groceries")}
-                className="p-6 bg-amber-50 hover:bg-amber-100 text-amber-950 border-2 border-amber-200 hover:border-amber-400 rounded-2xl flex flex-col items-center justify-center gap-2 transition-all min-h-[120px]">
-
-                <span className="text-3xl">🛒</span>
-                <span className="text-xl font-bold">Groceries</span>
-                <span className="text-sm font-medium text-amber-900">Buying food, medicine, or supplies</span>
-              </button>
-
-              <button
-                onClick={() => handleSelectCategory("Fix something")}
-                className="p-6 bg-amber-50 hover:bg-amber-100 text-amber-950 border-2 border-amber-200 hover:border-amber-400 rounded-2xl flex flex-col items-center justify-center gap-2 transition-all min-h-[120px]">
-
-                <span className="text-3xl">💡</span>
-                <span className="text-xl font-bold">Fix something</span>
-                <span className="text-sm font-medium text-amber-900">Lightbulb, dripping tap, basic repairs</span>
-              </button>
-
-              <button
-                onClick={() => handleSelectCategory("Phone/computer help")}
-                className="p-6 bg-amber-50 hover:bg-amber-100 text-amber-950 border-2 border-amber-200 hover:border-amber-400 rounded-2xl flex flex-col items-center justify-center gap-2 transition-all min-h-[120px]">
-
-                <span className="text-3xl">📱</span>
-                <span className="text-xl font-bold">Phone/computer help</span>
-                <span className="text-sm font-medium text-amber-900">Tech support, video calls, setting apps</span>
-              </button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 pt-2">
+              {REQUEST_CATEGORIES.map((cat) => {
+                const IconComp = cat.icon;
+                const isUrgent = cat.id === "Urgent Help";
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => handleSelectCategory(cat.id)}
+                    className={`p-5 rounded-2xl flex flex-col items-center justify-center text-center gap-2.5 transition-all min-h-[145px] cursor-pointer shadow-2xs ${cat.color}`}
+                  >
+                    <div className={`p-2.5 rounded-xl border ${isUrgent ? "bg-rose-100 border-rose-300 text-rose-700" : "bg-white/90 border-emerald-100 text-[#263c2e] shadow-2xs"}`}>
+                      <IconComp size={24} />
+                    </div>
+                    <span className="text-base font-black leading-tight">{cat.title}</span>
+                    <span className="text-xs font-medium opacity-80 leading-snug">{cat.desc}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         }
@@ -383,7 +829,7 @@ export default function ResidentDashboard({ user, tasks, onReload, onLogout, soc
             <div className="space-y-2">
               <h3 className="text-2xl font-black text-gray-950">Step 2 of 3: Describe what you need</h3>
               <p className="text-gray-600 text-lg">
-                Type in simple words what we should fetch or fix for you, or use your voice:
+                Type in simple words what we should fetch or fix for you:
               </p>
             </div>
 
@@ -394,12 +840,6 @@ export default function ResidentDashboard({ user, tasks, onReload, onLogout, soc
             }
 
             <div className="space-y-4 pt-2">
-              {/* Voice Request Component */}
-              <VoiceRequest
-                onTranscript={(text) => setDescription(text)}
-                currentText={description}
-              />
-
               <textarea
                 className="w-full border-2 border-gray-300 rounded-2xl p-5 text-lg font-medium text-gray-950 placeholder-gray-400 focus:border-amber-500 focus:outline-none min-h-[150px]"
                 placeholder="e.g., 'Need help getting 2 liters of milk and a packet of bread from the corner store. I can pay by cash.'"

@@ -1,6 +1,5 @@
 import "dotenv/config";
 import { db, usersCol, tasksCol, auditLogCol, locationsCol } from "./index.js";
-import bcrypt from "bcrypt";
 
 async function seed() {
   console.log("Seeding Firestore database...");
@@ -16,12 +15,10 @@ async function seed() {
   await locRef.set(locationData);
 
   // 2. Create Sandbox Users
-  const passwordHash = await bcrypt.hash("password123", 10);
   const users = [
     {
       id: "admin-1",
-      phoneNumber: "+91 90000 00000",
-    passwordHash,
+      phoneNumber: "1234567890",
       name: "Admin Control",
       role: "admin",
       verificationStatus: "approved",
@@ -32,7 +29,6 @@ async function seed() {
     {
       id: "resident-1",
       phoneNumber: "+91 90000 00001",
-    passwordHash,
       name: "Jane Doe",
       role: "resident",
       verificationStatus: "approved",
@@ -43,7 +39,6 @@ async function seed() {
     {
       id: "volunteer-1",
       phoneNumber: "+91 90000 00002",
-    passwordHash,
       name: "Alice Green",
       role: "volunteer",
       verificationStatus: "approved",

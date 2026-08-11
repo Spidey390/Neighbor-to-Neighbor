@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { AlertCircle, Compass, MapPin } from "lucide-react";
+import { AlertCircle, Compass, LocateFixed, MapPin } from "lucide-react";
 import { useLanguage } from "../context/LanguageContext.jsx";
 
 const FALLBACK_LOCATION = { lat: 12.9716, lng: 77.5946 };
@@ -23,13 +23,23 @@ export default function LocationPickerMap({
   const markerInstanceRef = useRef(null);
   const onLocationChangeRef = useRef(onLocationChange);
   const [leafletStatus, setLeafletStatus] = useState(() => window.L ? "ready" : "loading");
-  const [tileError, setTileError] = useState("");
+  const [liveCoords, setLiveCoords] = useState({
+    lat: String(toCoordinate(lat, FALLBACK_LOCATION.lat)),
+    lng: String(toCoordinate(lng, FALLBACK_LOCATION.lng))
+  });
 
   useEffect(() => {
     onLocationChangeRef.current = onLocationChange;
   }, [onLocationChange]);
 
-  // Load Leaflet once and give the user a clear recovery state if the network asset fails.
+  useEffect(() => {
+    setLiveCoords({
+      lat: String(toCoordinate(lat, FALLBACK_LOCATION.lat)),
+      lng: String(toCoordinate(lng, FALLBACK_LOCATION.lng))
+    });
+  }, [lat, lng]);
+
+  // Load Leaflet library dynamically if not present
   useEffect(() => {
     if (window.L) {
       setLeafletStatus("ready");
@@ -68,7 +78,6 @@ export default function LocationPickerMap({
     script.addEventListener("load", markReady);
     script.addEventListener("error", markFailed);
 
-    // A script can finish loading just before its listeners are attached.
     if (window.L) markReady();
 
     return () => {
@@ -78,8 +87,7 @@ export default function LocationPickerMap({
     };
   }, []);
 
-  // Create and fully clean up the Leaflet instance. Cleanup prevents the
-  // "Map container is already initialized" failure after a profile rerender.
+  // Initialize Map with Google Maps Tile Layer & Draggable Marker Pin
   useEffect(() => {
     if (leafletStatus !== "ready" || !mapContainerRef.current || mapInstanceRef.current) return undefined;
 
@@ -88,39 +96,66 @@ export default function LocationPickerMap({
 
     const initialLat = toCoordinate(lat, FALLBACK_LOCATION.lat);
     const initialLng = toCoordinate(lng, FALLBACK_LOCATION.lng);
+
     const map = L.map(mapContainerRef.current, {
       zoomControl: true,
-      scrollWheelZoom: true
-    }).setView([initialLat, initialLng], 13);
+      scrollWheelZoom: true,
+      attributionControl: false
+    }).setView([initialLat, initialLng], 15);
 
-    const tileLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      maxZoom: 19
+    // Google Maps Tile Layer (Official Google Roadmap view)
+    L.tileLayer("https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", {
+      maxZoom: 20,
+      subdomains: ["mt0", "mt1", "mt2", "mt3"],
+      attribution: "&copy; <a href='https://maps.google.com'>Google Maps</a>"
     }).addTo(map);
 
-    const customIcon = L.divIcon({
-      className: "custom-leaflet-pin",
-      html: `<div style="background-color:#4f46e5; width:28px; height:28px; border-radius:50%; border:3px solid white; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1); display:flex; align-items:center; justify-content:center; color:white;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg></div>`,
-      iconSize: [28, 28],
-      iconAnchor: [14, 28]
+    // Google Maps Red Pin Icon
+    const googlePinIcon = L.divIcon({
+      className: "google-maps-pin-marker",
+      html: `
+        <div style="position:relative; width:34px; height:44px; display:flex; justify-content:center; align-items:center; filter:drop-shadow(0 4px 8px rgba(0,0,0,0.35)); cursor:grab;">
+          <svg width="34" height="44" viewBox="0 0 38 50" fill="none">
+            <path d="M19 0C8.5 0 0 8.5 0 19C0 33.25 19 50 19 50C19 50 38 33.25 38 19C38 8.5 29.5 0 19 0Z" fill="#EA4335"/>
+            <circle cx="19" cy="19" r="7" fill="white"/>
+          </svg>
+        </div>
+      `,
+      iconSize: [34, 44],
+      iconAnchor: [17, 44]
     });
 
     const marker = L.marker([initialLat, initialLng], {
       draggable: true,
-      icon: customIcon
+      icon: googlePinIcon,
+      autoPan: true
     }).addTo(map);
 
+    // Update coordinates while dragging pointer
+    marker.on("drag", () => {
+      const pos = marker.getLatLng();
+      setLiveCoords({ lat: pos.lat.toFixed(4), lng: pos.lng.toFixed(4) });
+    });
+
+    // Update final coordinates when drag stops
     marker.on("dragend", () => {
-      const position = marker.getLatLng();
+      const pos = marker.getLatLng();
+      const newLat = pos.lat.toFixed(4);
+      const newLng = pos.lng.toFixed(4);
+      setLiveCoords({ lat: newLat, lng: newLng });
       if (onLocationChangeRef.current) {
-        onLocationChangeRef.current(position.lat.toFixed(4), position.lng.toFixed(4));
+        onLocationChangeRef.current(newLat, newLng);
       }
     });
 
+    // Move marker and update coordinates on map click
     map.on("click", (e) => {
       marker.setLatLng(e.latlng);
+      const newLat = e.latlng.lat.toFixed(4);
+      const newLng = e.latlng.lng.toFixed(4);
+      setLiveCoords({ lat: newLat, lng: newLng });
       if (onLocationChangeRef.current) {
-        onLocationChangeRef.current(e.latlng.lat.toFixed(4), e.latlng.lng.toFixed(4));
+        onLocationChangeRef.current(newLat, newLng);
       }
     });
 
@@ -134,8 +169,36 @@ export default function LocationPickerMap({
     };
   }, [leafletStatus]);
 
-  // Keep the marker in sync with typed/live coordinates without snapping the
-  // map back while someone is clicking or dragging it.
+  // Automatically fetch current location on mount
+  useEffect(() => {
+    if (leafletStatus !== "ready") return;
+
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const userLat = position.coords.latitude.toFixed(4);
+          const userLng = position.coords.longitude.toFixed(4);
+          setLiveCoords({ lat: userLat, lng: userLng });
+
+          if (onLocationChangeRef.current) {
+            onLocationChangeRef.current(userLat, userLng);
+          }
+
+          if (mapInstanceRef.current && markerInstanceRef.current) {
+            const newLatLng = [position.coords.latitude, position.coords.longitude];
+            markerInstanceRef.current.setLatLng(newLatLng);
+            mapInstanceRef.current.setView(newLatLng, 16, { animate: true });
+          }
+        },
+        (err) => {
+          console.log("Automatic location permission or lookup skipped.", err);
+        },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+      );
+    }
+  }, [leafletStatus]);
+
+  // Keep marker & map view synced when lat/lng props change externally
   useEffect(() => {
     const map = mapInstanceRef.current;
     const marker = markerInstanceRef.current;
@@ -144,7 +207,9 @@ export default function LocationPickerMap({
     const nextLat = toCoordinate(lat, FALLBACK_LOCATION.lat);
     const nextLng = toCoordinate(lng, FALLBACK_LOCATION.lng);
     const markerPosition = marker.getLatLng();
-    const isExternalCoordinateChange = Math.abs(markerPosition.lat - nextLat) > 0.00001 || Math.abs(markerPosition.lng - nextLng) > 0.00001;
+    const isExternalCoordinateChange =
+      Math.abs(markerPosition.lat - nextLat) > 0.00001 ||
+      Math.abs(markerPosition.lng - nextLng) > 0.00001;
 
     if (isExternalCoordinateChange) {
       marker.setLatLng([nextLat, nextLng]);
@@ -152,50 +217,69 @@ export default function LocationPickerMap({
     }
   }, [lat, lng]);
 
+  const handleRecenter = () => {
+    const map = mapInstanceRef.current;
+    const marker = markerInstanceRef.current;
+    if (map && marker) {
+      const pos = marker.getLatLng();
+      map.setView(pos, 16, { animate: true });
+    }
+  };
+
   const isMapUnavailable = leafletStatus === "error";
 
   return (
-    <div className="bg-slate-50 p-4 rounded-2xl border border-gray-200/80 space-y-3">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+    <div className="bg-white p-5 rounded-3xl border border-gray-200/80 space-y-4 shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <span className="text-xs font-black text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
-            <MapPin size={16} className="text-indigo-600" />
+            <MapPin size={16} className="text-[#263c2e]" />
             {t("selectLocationOnMap")}
-          </span>
-          <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full inline-block mt-1">
-            📍 {lat}° N, {lng}° E
           </span>
         </div>
 
-        <button
-          type="button"
-          onClick={fetchLiveLocation}
-          disabled={geoLoading}
-          className="px-2.5 py-1 bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 rounded-lg text-xs font-bold transition-all disabled:opacity-50 flex items-center gap-1 shadow-2xs"
-        >
-          <Compass size={14} />
-          {geoLoading ? "..." : t("currentLocation")}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleRecenter}
+            className="px-3.5 py-2 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+          >
+            <LocateFixed size={15} className="text-[#263c2e]" />
+            <span>Recenter Pin</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={fetchLiveLocation}
+            disabled={geoLoading}
+            className="px-3.5 py-2 bg-emerald-50 border border-emerald-200 text-[#263c2e] hover:bg-emerald-100/70 rounded-xl text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+          >
+            <Compass size={15} />
+            <span>{geoLoading ? "Locating..." : t("currentLocation")}</span>
+          </button>
+        </div>
       </div>
 
       {geoError && (
-        <p className="text-[10px] text-amber-700 font-bold bg-amber-50 p-2.5 rounded-xl border border-amber-200">
-          ⚠️ {geoError}
+        <p className="text-xs text-amber-800 font-bold bg-amber-50 p-3 rounded-xl border border-amber-200 flex items-center gap-1.5">
+          <span>⚠️</span>
+          <span>{geoError}</span>
         </p>
       )}
 
-      <div className="relative w-full h-56 rounded-xl overflow-hidden border border-indigo-200 shadow-sm bg-gray-100">
+      <div className="relative w-full h-72 rounded-2xl overflow-hidden border border-gray-300 shadow-xs bg-slate-100">
         {leafletStatus !== "ready" && (
-          <div className="absolute inset-0 flex items-center justify-center bg-indigo-50/85 backdrop-blur-xs text-xs font-bold text-indigo-700 gap-2 z-10 px-5 text-center">
-            {isMapUnavailable ? <AlertCircle size={17} /> : <span className="animate-spin text-base">🌐</span>}
-            {isMapUnavailable ? "Map unavailable." : "Loading map..."}
+          <div className="absolute inset-0 flex items-center justify-center bg-white/90 backdrop-blur-xs text-xs font-bold text-[#263c2e] gap-2 z-10 px-5 text-center">
+            {isMapUnavailable ? <AlertCircle size={17} className="text-red-500" /> : <span className="animate-spin text-base">🌐</span>}
+            <span>{isMapUnavailable ? "Map unavailable." : "Loading Google Maps..."}</span>
           </div>
         )}
-        <div ref={mapContainerRef} className="w-full h-full z-0" role="application" aria-label="Location map" />
+        <div ref={mapContainerRef} className="w-full h-full z-0" role="application" aria-label="Google Maps Location Picker" />
       </div>
 
-      <p className="text-[11px] font-medium text-gray-500 text-center">
-        💡 {t("selectLocationOnMap")}
+      <p className="text-xs font-semibold text-gray-500 text-center flex items-center justify-center gap-1.5">
+        <span>📍</span>
+        <span>Drag map pointer or click anywhere on Google Maps to fine-tune your location.</span>
       </p>
     </div>
   );

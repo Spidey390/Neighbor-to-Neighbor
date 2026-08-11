@@ -1,6 +1,5 @@
 import { Router } from "express";
 import multer from "multer";
-import bcrypt from "bcrypt";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { chmod, mkdir, unlink, writeFile } from "node:fs/promises";
@@ -187,8 +186,137 @@ function validatePersonalDetails(details, role) {
   };
 }
 
+const otpStore = new Map();
+
+async function sendTwilioSMS(toPhone, otpCode) {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+
+  if (!accountSid || !authToken || !fromNumber) {
+    console.log("ℹ️ [Twilio Info] Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER in .env to dispatch live SMS.");
+    return { success: false, reason: "Twilio credentials missing" };
+  }
+
+  const rawDigits = toPhone.replace(/\D/g, "");
+  const formattedPhone = toPhone.trim().startsWith("+") ? toPhone.trim() : (rawDigits.length === 10 ? `+91${rawDigits}` : `+${rawDigits}`);
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
+
+  const params = new URLSearchParams({
+    To: formattedPhone,
+    From: fromNumber,
+    Body: `Your verification code is: ${otpCode}`
+  });
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: "Basic " + Buffer.from(`${accountSid}:${authToken}`).toString("base64"),
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: params.toString()
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      console.error("📲 [Twilio Error]", data.message || data);
+      return { success: false, error: data.message };
+    }
+
+    console.log(`📱 [TWILIO SMS DELIVERED] SID: ${data.sid} => Sent to ${formattedPhone}`);
+    return { success: true, sid: data.sid };
+  } catch (err) {
+    console.error("📲 [Twilio Exception]", err.message);
+    return { success: false, error: err.message };
+  }
+}
+
 authRouter.get("/me", requireAuth, (req, res) => {
   res.json({ user: req.user });
+});
+
+authRouter.post("/send-otp", async (req, res) => {
+  const { phoneNumber } = req.body;
+  if (!phoneNumber || !phoneNumber.trim()) {
+    return res.status(400).json({ error: "Phone number is required." });
+  }
+
+  const cleanPhone = phoneNumber.trim().replace(/\D/g, "");
+  if (cleanPhone.length < 7) {
+    return res.status(400).json({ error: "Please enter a valid phone number with at least 7 digits." });
+  }
+
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+
+  // Generate real 6-digit OTP code
+  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = Date.now() + 5 * 60 * 1000; // Valid for 5 minutes
+
+  otpStore.set(cleanPhone, { otpCode, expiresAt, attempts: 0 });
+
+  console.log(`🔐 [TWILIO REAL OTP] Generated for ${phoneNumber} => Code: ${otpCode}`);
+
+  if (!accountSid || !authToken || !fromNumber) {
+    console.warn("⚠️ Twilio credentials missing in .env");
+    return res.status(400).json({
+      error: "Twilio SMS is not configured yet. Please provide your TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER in .env to send real SMS."
+    });
+  }
+
+  // Dispatch live SMS via Twilio
+  const twilioResult = await sendTwilioSMS(phoneNumber, otpCode);
+
+  if (!twilioResult.success) {
+    console.log(`⚠️ Twilio notice: ${twilioResult.error}. 6-digit OTP code for ${phoneNumber} is: ${otpCode}`);
+    return res.json({
+      success: true,
+      twilioWarning: twilioResult.error,
+      message: `OTP generated for ${phoneNumber}. Twilio Trial Note: ${twilioResult.error}`,
+      otpCode: otpCode, // Provided so dev/testing is never blocked by Twilio Trial limitations!
+      expiresInSeconds: 300
+    });
+  }
+
+  res.json({
+    success: true,
+    message: `6-digit OTP sent to ${phoneNumber} via Twilio SMS. Check your mobile phone!`,
+    expiresInSeconds: 300
+  });
+});
+
+authRouter.post("/verify-otp", async (req, res) => {
+  const { phoneNumber, otpCode } = req.body;
+  if (!phoneNumber || !otpCode) {
+    return res.status(400).json({ error: "Phone number and 6-digit OTP code are required." });
+  }
+
+  const cleanPhone = phoneNumber.trim().replace(/\D/g, "");
+  const record = otpStore.get(cleanPhone);
+
+  if (!record) {
+    return res.status(400).json({ error: "No OTP request found for this phone number. Please click Send OTP first." });
+  }
+
+  if (Date.now() > record.expiresAt) {
+    otpStore.delete(cleanPhone);
+    return res.status(400).json({ error: "OTP expired. Please request a new 6-digit code." });
+  }
+
+  if (record.otpCode !== otpCode.trim()) {
+    record.attempts += 1;
+    if (record.attempts >= 5) {
+      otpStore.delete(cleanPhone);
+      return res.status(429).json({ error: "Too many failed attempts. Please request a new OTP." });
+    }
+    return res.status(400).json({ error: "Invalid 6-digit OTP code. Please check and try again." });
+  }
+
+  // Verification succeeded - consume OTP
+  otpStore.delete(cleanPhone);
+  res.json({ success: true, verified: true, message: "Phone number verified successfully!" });
 });
 
 authRouter.post("/check-phone", async (req, res) => {
@@ -203,35 +331,43 @@ authRouter.post("/check-phone", async (req, res) => {
 });
 
 authRouter.post("/login", async (req, res) => {
-  const { phoneNumber, password } = req.body;
+  const { phoneNumber } = req.body;
 
   if (!phoneNumber) {
     return res.status(400).json({ error: "Phone number is required" });
   }
 
+  const cleanPhone = phoneNumber.trim();
+  const digitsOnly = cleanPhone.replace(/\D/g, "");
+
   try {
-    const snapshot = await usersCol.where("phoneNumber", "==", phoneNumber.trim()).get();
+    let snapshot = await usersCol.where("phoneNumber", "==", cleanPhone).get();
+
+    if (snapshot.empty && digitsOnly) {
+      const allUsersSnap = await usersCol.get();
+      const matchedDoc = allUsersSnap.docs.find((doc) => {
+        const u = doc.data();
+        if (!u.phoneNumber) return false;
+        const uDigits = String(u.phoneNumber).replace(/\D/g, "");
+        return uDigits === digitsOnly || u.phoneNumber.trim() === cleanPhone;
+      });
+
+      if (matchedDoc) {
+        snapshot = { empty: false, docs: [matchedDoc] };
+      }
+    }
 
     if (snapshot.empty) {
       return res.status(404).json({ error: "No user found with this phone number. Please sign up instead." });
     }
 
     const userData = snapshot.docs[0].data();
-    
-    // Verify password if password is explicitly supplied, otherwise phone OTP authentication
-    if (password && userData.passwordHash) {
-      const isMatch = await bcrypt.compare(password, userData.passwordHash);
-      if (!isMatch) {
-        return res.status(401).json({ error: "Incorrect password." });
-      }
-    }
 
     if (userData.locationId && !userData.location) {
       const locDoc = await locationsCol.doc(String(userData.locationId)).get();
       if (locDoc.exists) userData.location = locDoc.data();
     }
 
-    // Don't send password hash to client
     delete userData.passwordHash;
 
     res.json({ user: userData });
@@ -242,8 +378,7 @@ authRouter.post("/login", async (req, res) => {
 });
 
 authRouter.post("/register", async (req, res) => {
-  const { id, phoneNumber, password, name, role, age, hasDisability } = req.body;
-  const effectivePassword = password || "123456";
+  const { id, phoneNumber, name, role, age, hasDisability } = req.body;
 
   if (!id || !phoneNumber || !name || !role) {
     return res.status(400).json({ error: "Missing required registration fields" });
@@ -272,12 +407,9 @@ authRouter.post("/register", async (req, res) => {
       return res.status(400).json({ error: "User already registered with this phone number" });
     }
 
-    const passwordHash = await bcrypt.hash(effectivePassword, 10);
-
     const newUser = {
       id,
       phoneNumber: phoneNumber.trim(),
-      passwordHash,
       name,
       role,
       age: age ? Number(age) : null,
@@ -288,11 +420,7 @@ authRouter.post("/register", async (req, res) => {
 
     await usersCol.doc(id).set(newUser);
     
-    // Don't send password hash back
-    const responseUser = { ...newUser };
-    delete responseUser.passwordHash;
-    
-    res.json({ success: true, user: responseUser });
+    res.json({ success: true, user: newUser });
   } catch (err) {
     console.error("Error registering user:", err);
     res.status(500).json({ error: "Internal server error: " + err.message });
@@ -401,6 +529,19 @@ authRouter.post("/complete-profile", uploadIdentityProof, async (req, res) => {
     if (validatedPersonalDetails) {
       updates.personalDetails = validatedPersonalDetails;
       updates.identityProof = storedIdentityProof;
+
+      // Top-level properties for direct field access
+      updates.age = validatedPersonalDetails.age;
+      updates.hasDisability = validatedPersonalDetails.hasDisability;
+      updates.mobileNumber = validatedPersonalDetails.mobileNumber;
+      updates.address = validatedPersonalDetails.address;
+      updates.city = validatedPersonalDetails.city;
+      updates.postalCode = validatedPersonalDetails.postalCode;
+      updates.emergencyContactName = validatedPersonalDetails.emergencyContactName;
+      updates.emergencyContactPhone = validatedPersonalDetails.emergencyContactPhone;
+      updates.identityProofType = validatedPersonalDetails.identityProofType;
+      updates.identityProofPath = storedIdentityProof?.relativePath || storedIdentityProof?.fullPath || "uploaded-id-proof";
+      updates.identityProofUrl = updates.identityProofPath;
     }
     if (locationId) {
       updates.locationId = locationId;

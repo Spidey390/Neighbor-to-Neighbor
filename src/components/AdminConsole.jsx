@@ -610,68 +610,92 @@ export default function AdminConsole({ user }) {
                     </div>
                     <div>
                       <span className="block text-[11px] font-bold text-gray-400 uppercase">Role</span>
-                      <span className="inline-block px-2 py-0.5 rounded text-[11px] font-black bg-indigo-100 text-indigo-700 capitalize">
+                      <span className="inline-block px-2.5 py-0.5 rounded text-[11px] font-black bg-emerald-100 text-emerald-800 capitalize mt-0.5">
                         {selectedUserForReview.role}
                       </span>
                     </div>
                   </div>
                 </div>
 
-                <div>
-                  <h4 className="text-xs font-black text-gray-500 uppercase tracking-wider mb-3">Personal Details</h4>
-                  <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <span className="block text-[11px] font-bold text-gray-400 uppercase">Age</span>
-                        <span className="text-sm font-bold text-gray-700">{selectedUserForReview.age || "N/A"}</span>
-                      </div>
-                      <div>
-                        <span className="block text-[11px] font-bold text-gray-400 uppercase">Mobile</span>
-                        <span className="text-sm font-bold text-gray-700">{selectedUserForReview.mobileNumber || "N/A"}</span>
-                      </div>
-                    </div>
+                {(() => {
+                  const pd = selectedUserForReview.personalDetails || {};
+                  const ageVal = pd.age || selectedUserForReview.age || "N/A";
+                  const mobileVal = pd.mobileNumber || selectedUserForReview.mobileNumber || selectedUserForReview.phoneNumber || "N/A";
+                  const addressVal = pd.address || selectedUserForReview.address || "N/A";
+                  const cityVal = pd.city || selectedUserForReview.city || "";
+                  const postalVal = pd.postalCode || selectedUserForReview.postalCode || "";
+                  const emergencyName = pd.emergencyContactName || selectedUserForReview.emergencyContactName;
+                  const emergencyPhone = pd.emergencyContactPhone || selectedUserForReview.emergencyContactPhone;
+
+                  return (
                     <div>
-                      <span className="block text-[11px] font-bold text-gray-400 uppercase">Address</span>
-                      <span className="text-sm font-bold text-gray-700 block">{selectedUserForReview.address || "N/A"}</span>
-                      <span className="text-sm font-bold text-gray-700 block">{selectedUserForReview.city}, {selectedUserForReview.postalCode}</span>
-                    </div>
-                    {selectedUserForReview.emergencyContactName && (
-                      <div className="mt-2 pt-2 border-t border-gray-200">
-                        <span className="block text-[11px] font-bold text-red-400 uppercase">Emergency Contact</span>
-                        <span className="text-sm font-bold text-gray-700">
-                          {selectedUserForReview.emergencyContactName} ({selectedUserForReview.emergencyContactPhone})
-                        </span>
+                      <h4 className="text-xs font-black text-gray-500 uppercase tracking-wider mb-3">Personal Details</h4>
+                      <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <span className="block text-[11px] font-bold text-gray-400 uppercase">Age</span>
+                            <span className="text-sm font-bold text-gray-700">{ageVal}</span>
+                          </div>
+                          <div>
+                            <span className="block text-[11px] font-bold text-gray-400 uppercase">Mobile</span>
+                            <span className="text-sm font-bold text-gray-700">{mobileVal}</span>
+                          </div>
+                        </div>
+                        <div>
+                          <span className="block text-[11px] font-bold text-gray-400 uppercase">Address</span>
+                          <span className="text-sm font-bold text-gray-700 block">{addressVal}</span>
+                          {(cityVal || postalVal) && (
+                            <span className="text-sm font-bold text-gray-700 block">{cityVal}{cityVal && postalVal ? ", " : ""}{postalVal}</span>
+                          )}
+                        </div>
+                        {emergencyName && (
+                          <div className="mt-2 pt-2 border-t border-gray-200">
+                            <span className="block text-[11px] font-bold text-red-600 uppercase">Emergency Contact</span>
+                            <span className="text-sm font-bold text-gray-700">
+                              {emergencyName} {emergencyPhone ? `(${emergencyPhone})` : ""}
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Identity Proof */}
-              <div>
-                <h4 className="text-xs font-black text-gray-500 uppercase tracking-wider mb-3">Identity Verification</h4>
-                <div className="border border-gray-200 rounded-xl p-5 flex flex-col items-center justify-center bg-gray-50 space-y-4">
-                  <div className="flex items-center gap-2">
-                    <FileText className="text-indigo-600" size={24} />
-                    <span className="font-bold text-gray-700">{selectedUserForReview.identityProofType || "Document"}</span>
+              {(() => {
+                const pd = selectedUserForReview.personalDetails || {};
+                const idProof = selectedUserForReview.identityProof || {};
+                const docType = pd.identityProofType || selectedUserForReview.identityProofType || idProof.fileName || "Identity Proof Document";
+                const docPath = idProof.relativePath || idProof.fullPath || selectedUserForReview.identityProofPath || selectedUserForReview.identityProofUrl;
+
+                return (
+                  <div>
+                    <h4 className="text-xs font-black text-gray-500 uppercase tracking-wider mb-3">Identity Verification</h4>
+                    <div className="border border-gray-200 rounded-xl p-5 flex flex-col items-center justify-center bg-gray-50 space-y-4">
+                      <div className="flex items-center gap-2">
+                        <FileText className="text-[#263c2e]" size={24} />
+                        <span className="font-bold text-gray-900">{docType}</span>
+                      </div>
+                      
+                      {docPath ? (
+                        <a 
+                          href={docPath.startsWith('gs://') 
+                            ? `https://storage.googleapis.com/${docPath.replace('gs://', '')}` 
+                            : docPath.startsWith('http') || docPath.startsWith('/') ? docPath : `/private-uploads/id-proofs/${docPath}`} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="px-4 py-2 bg-white border border-gray-300 text-sm font-bold text-[#263c2e] rounded-lg hover:bg-emerald-50 transition-colors shadow-2xs"
+                        >
+                          View ID Document ↗
+                        </a>
+                      ) : (
+                        <span className="text-sm text-red-600 font-bold">No document provided</span>
+                      )}
+                    </div>
                   </div>
-                  
-                  {selectedUserForReview.identityProofPath ? (
-                    <a 
-                      href={selectedUserForReview.identityProofPath.startsWith('gs://') 
-                        ? `https://storage.googleapis.com/${selectedUserForReview.identityProofPath.replace('gs://', '')}` 
-                        : selectedUserForReview.identityProofPath} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="px-4 py-2 bg-white border border-gray-300 text-sm font-bold text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
-                    >
-                      View ID Document ↗
-                    </a>
-                  ) : (
-                    <span className="text-sm text-red-500 font-bold">No document provided</span>
-                  )}
-                </div>
-              </div>
+                );
+              })()}
             </div>
 
             <div className="sticky bottom-0 bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end gap-3 rounded-b-2xl">
