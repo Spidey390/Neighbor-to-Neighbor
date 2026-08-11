@@ -1,59 +1,114 @@
-# Neighbor-to-Neighbor
+# 🌿 Neighbor-to-Neighbor
 
-Neighbor-to-Neighbor is a senior-care and community-help network that connects residents with verified local volunteers.
+A community support network that thoughtfully connects senior residents with verified local volunteers for everyday assistance, elder care, emergency help, and community support.
 
-## Prerequisites
+---
 
-- Node.js 22 or later
-- A Firebase project with Cloud Firestore enabled
-- A Firebase Admin service-account key with Firestore read/write access
+## ✨ Features
 
-## Local setup
+- **🔐 Real Mobile 6-Digit OTP Authentication (Fast2SMS Gateway)**
+  - Real 6-digit random OTP authentication dispatched directly to Indian mobile numbers via Fast2SMS SMS REST API.
+  - Rate-limited & 5-minute time-expiry protection.
 
-Clone the repository, install its locked dependencies, and create your local environment file:
+- **🎙️ Groq AI Voice & Text Request Parsing**
+  - AI-driven request creation powered by Groq (`llama-3.3-70b-versatile`).
+  - Converts natural voice or text in English and Tamil into structured title, urgency, category, and skill tag extractions.
+  - Includes a 5-second silence auto-submit timer.
 
-```bash
-git clone <repository-url>
-cd Neighbor-to-Neighbor
-npm ci
-cp .env.example .env
-```
+- **📍 Interactive Google Maps Location Picker**
+  - High-precision Google Maps roadmap tile layer and draggable pointer pin.
+  - **Auto-Recentering & GPS**: Automatically locates the user's current position via browser Geolocation API on load and animates the pin.
 
-Update `.env` with your own Firebase project and local service-account file:
+- **🤝 Volunteer Skill Matching & Task Management**
+  - Radius-based proximity matching (e.g. 5 km, 10 km).
+  - Volunteer skill tag filtering (Groceries, Plumbing, Moving, Medical, etc.).
+  - Real-time task status tracking (`Pending` $\rightarrow$ `Assigned` $\rightarrow$ `Completed`).
 
-```env
-APP_URL="http://localhost:3000"
-FIREBASE_PROJECT_ID="your-firebase-project-id"
-GOOGLE_APPLICATION_CREDENTIALS="./service-account.json"
-```
+- **📹 WebRTC Video Calling & Real-Time Chat**
+  - Socket.IO signaling server supporting peer-to-peer WebRTC video calling.
+  - In-app live chat for residents and volunteers.
 
-Download or securely obtain the service-account key and save it as `service-account.json` in the project root. The service account needs the **Cloud Datastore User** role (or an equivalent, appropriately scoped Firestore role) in the Firebase project's Google Cloud IAM settings.
+- **🛡️ Admin Governance & Audit Logging**
+  - Admin dashboard for volunteer identity proof verification, user management, and compliance audit logging.
 
-> Never commit `.env` or `service-account.json`. They are already ignored by Git. Share credentials only through an approved secret-management system.
+---
 
-## Seed demo data
+## 🛠️ Prerequisites
 
-After Firebase access is configured, seed the shared database with the demo accounts and initial tasks:
+- **Node.js** (v18 or v22+)
+- **Firebase Project** with Cloud Firestore enabled
+- **Groq API Key** (for AI Voice & Text request extraction)
+- **Fast2SMS API Key** (for Indian Mobile SMS OTP delivery)
 
-```bash
-node src/db/seed.js
-```
+---
 
-Run this once for a shared development database. The demo profiles are Jane Doe (resident), Alice Green (volunteer), and Admin Control (admin).
+## 🚀 Local Setup
 
-## Run locally
+1. **Clone the Repository**:
+   ```bash
+   git clone <repository-url>
+   cd Neighbor-to-Neighbor
+   ```
 
-```bash
-npm run dev
-```
+2. **Install Dependencies**:
+   ```bash
+   npm install
+   ```
 
-Open [http://localhost:3000](http://localhost:3000).
+3. **Configure Environment Variables**:
+   Copy the `.env.example` template:
+   ```bash
+   cp .env.example .env
+   ```
 
-### Demo login
+   Update `.env` with your API keys and credentials:
+   ```env
+   APP_URL="http://localhost:3000"
+   FIREBASE_PROJECT_ID="your-firebase-project-id"
+   GOOGLE_APPLICATION_CREDENTIALS="./service-account.json"
+   GROQ_API_KEY="your-groq-api-key"
+   FAST2SMS_API_KEY="your-fast2sms-api-key"
+   CLOUDINARY_URL="cloudinary://your_api_key:your_api_secret@your_cloud_name"
+   ```
 
-On the login screen, select one of the sandbox profiles under **"Or Evaluate Sandbox Profiles"**.
+4. **Firebase Service Account Setup**:
+   - Obtain your Firebase Admin Service Account JSON key from Google Cloud / Firebase Console.
+   - Save it as `service-account.json` in the root directory.
 
-## Common Firebase errors
+---
 
-- **"Could not load the default credentials"**: confirm `GOOGLE_APPLICATION_CREDENTIALS` points to an existing `service-account.json` file.
-- **"PERMISSION_DENIED: Missing or insufficient permissions"**: grant the service account the **Cloud Datastore User** role, then allow a few minutes for IAM changes to propagate.
+## 🗄️ Database Management Scripts
+
+- **Seed Demo Accounts & Tasks**:
+  ```bash
+  node src/db/seed.js
+  ```
+  Seeds sandbox accounts: `Admin Control` (admin), `Jane Doe` (resident), and `Alice Green` (volunteer).
+
+- **Clear All Database Collections (Publish Cleanup)**:
+  ```bash
+  node src/db/clear.js
+  ```
+  Wipes all collections (`users`, `tasks`, `task_claims`, `audit_log`, `ratings`, `flags`, `locations`, `chat_messages`) for production deployment.
+
+---
+
+## 💻 Running the Application
+
+- **Development Server**:
+  ```bash
+  npm run dev
+  ```
+  Starts Vite dev server and Node backend API at `http://localhost:3000`.
+
+- **Production Build**:
+  ```bash
+  npm run build
+  npm start
+  ```
+
+---
+
+## 📜 License
+
+MIT License. Designed with care for senior care and community empowerment.
