@@ -256,6 +256,7 @@ authRouter.post("/send-otp", async (req, res) => {
   if (!smsResult.success) {
     // No API key — dev/testing mode: return code in response
     if (smsResult.reason === "api_key_missing") {
+      console.log(`\n${"─".repeat(50)}\n💡 [DEV MODE] OTP for ${phoneNumber}: ${otpCode}\n${"─".repeat(50)}\n`);
       return res.json({
         success: true,
         smsWarning: "no_api_key",
@@ -264,12 +265,12 @@ authRouter.post("/send-otp", async (req, res) => {
         expiresInSeconds: 300
       });
     }
-    // API key present but delivery failed
+    // SMS delivery failed (e.g. invalid number) — print OTP to server terminal
+    console.log(`\n${"═".repeat(50)}\n🔑 [OTP FALLBACK] SMS failed for ${phoneNumber}\n   CODE: ${otpCode}  (valid 5 min)\n   Reason: ${smsResult.error}\n${"═".repeat(50)}\n`);
     return res.json({
       success: true,
       smsWarning: smsResult.error,
-      message: `OTP generated but SMS delivery failed: ${smsResult.error}`,
-      otpCode: otpCode,
+      message: `OTP generated. SMS delivery failed — check server terminal for the code.`,
       expiresInSeconds: 300
     });
   }

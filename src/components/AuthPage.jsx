@@ -350,6 +350,11 @@ export default function AuthPage({ onAuthSuccess, onBackToHome, initialTab = "lo
                     💡 No SMS key set — Testing Code: <strong className="font-mono tracking-widest">{loginFallbackOtp}</strong>
                   </p>
                 )}
+                {loginSmsWarning && !loginFallbackOtp && (
+                  <p className="text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-1">
+                    🖥️ SMS could not be delivered — check your <strong>server terminal</strong> for the OTP code.
+                  </p>
+                )}
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
