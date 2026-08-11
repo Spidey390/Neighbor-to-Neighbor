@@ -207,9 +207,10 @@ async function sendFast2SMS(toPhone, otpCode) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        route: "otp",
-        variables_values: otpCode,
-        numbers: mobileNumber
+        route: "q",
+        message: `Your Neighbor-to-Neighbor verification code is: ${otpCode}. Valid for 5 minutes. Do not share this code.`,
+        numbers: mobileNumber,
+        flash: 0
       })
     });
 
