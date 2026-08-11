@@ -188,46 +188,41 @@ function validatePersonalDetails(details, role) {
 
 const otpStore = new Map();
 
-async function sendTwilioSMS(toPhone, otpCode) {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+async function sendFast2SMS(toPhone, otpCode) {
+  const apiKey = process.env.FAST2SMS_API_KEY;
 
-  if (!accountSid || !authToken || !fromNumber) {
-    console.log("ℹ️ [Twilio Info] Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER in .env to dispatch live SMS.");
-    return { success: false, reason: "Twilio credentials missing" };
+  if (!apiKey) {
+    console.warn("⚠️ Fast2SMS API key missing in .env");
+    return { success: false, reason: "api_key_missing" };
   }
 
   const rawDigits = toPhone.replace(/\D/g, "");
-  const formattedPhone = toPhone.trim().startsWith("+") ? toPhone.trim() : (rawDigits.length === 10 ? `+91${rawDigits}` : `+${rawDigits}`);
-  const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
-
-  const params = new URLSearchParams({
-    To: formattedPhone,
-    From: fromNumber,
-    Body: `Your verification code is: ${otpCode}`
-  });
+  const mobileNumber = rawDigits.length > 10 ? rawDigits.slice(-10) : rawDigits;
 
   try {
-    const res = await fetch(url, {
+    const res = await fetch("https://www.fast2sms.com/dev/bulkV2", {
       method: "POST",
       headers: {
-        Authorization: "Basic " + Buffer.from(`${accountSid}:${authToken}`).toString("base64"),
-        "Content-Type": "application/x-www-form-urlencoded"
+        authorization: apiKey,
+        "Content-Type": "application/json"
       },
-      body: params.toString()
+      body: JSON.stringify({
+        route: "otp",
+        variables_values: otpCode,
+        numbers: mobileNumber
+      })
     });
 
     const data = await res.json();
-    if (!res.ok) {
-      console.error("📲 [Twilio Error]", data.message || data);
-      return { success: false, error: data.message };
+    if (data.return === true) {
+      console.log(`📱 [FAST2SMS DELIVERED] OTP => ${mobileNumber}`);
+      return { success: true };
+    } else {
+      console.error("📲 [Fast2SMS Error]", data);
+      return { success: false, error: JSON.stringify(data) };
     }
-
-    console.log(`📱 [TWILIO SMS DELIVERED] SID: ${data.sid} => Sent to ${formattedPhone}`);
-    return { success: true, sid: data.sid };
   } catch (err) {
-    console.error("📲 [Twilio Exception]", err.message);
+    console.error("📲 [Fast2SMS Exception]", err.message);
     return { success: false, error: err.message };
   }
 }
@@ -247,42 +242,40 @@ authRouter.post("/send-otp", async (req, res) => {
     return res.status(400).json({ error: "Please enter a valid phone number with at least 7 digits." });
   }
 
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const fromNumber = process.env.TWILIO_PHONE_NUMBER;
-
   // Generate real 6-digit OTP code
   const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
   const expiresAt = Date.now() + 5 * 60 * 1000; // Valid for 5 minutes
 
   otpStore.set(cleanPhone, { otpCode, expiresAt, attempts: 0 });
+  console.log(`🔐 [FAST2SMS REAL OTP] Generated for ${phoneNumber} => Code: ${otpCode}`);
 
-  console.log(`🔐 [TWILIO REAL OTP] Generated for ${phoneNumber} => Code: ${otpCode}`);
+  // Dispatch SMS via Fast2SMS
+  const smsResult = await sendFast2SMS(phoneNumber, otpCode);
 
-  if (!accountSid || !authToken || !fromNumber) {
-    console.warn("⚠️ Twilio credentials missing in .env");
-    return res.status(400).json({
-      error: "Twilio SMS is not configured yet. Please provide your TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER in .env to send real SMS."
-    });
-  }
-
-  // Dispatch live SMS via Twilio
-  const twilioResult = await sendTwilioSMS(phoneNumber, otpCode);
-
-  if (!twilioResult.success) {
-    console.log(`⚠️ Twilio notice: ${twilioResult.error}. 6-digit OTP code for ${phoneNumber} is: ${otpCode}`);
+  if (!smsResult.success) {
+    // No API key — dev/testing mode: return code in response
+    if (smsResult.reason === "api_key_missing") {
+      return res.json({
+        success: true,
+        smsWarning: "no_api_key",
+        message: `OTP generated for ${phoneNumber}. Set FAST2SMS_API_KEY in .env to send real SMS.`,
+        otpCode: otpCode,
+        expiresInSeconds: 300
+      });
+    }
+    // API key present but delivery failed
     return res.json({
       success: true,
-      twilioWarning: twilioResult.error,
-      message: `OTP generated for ${phoneNumber}. Twilio Trial Note: ${twilioResult.error}`,
-      otpCode: otpCode, // Provided so dev/testing is never blocked by Twilio Trial limitations!
+      smsWarning: smsResult.error,
+      message: `OTP generated but SMS delivery failed: ${smsResult.error}`,
+      otpCode: otpCode,
       expiresInSeconds: 300
     });
   }
 
   res.json({
     success: true,
-    message: `6-digit OTP sent to ${phoneNumber} via Twilio SMS. Check your mobile phone!`,
+    message: `6-digit OTP sent to ${phoneNumber}. Check your messages!`,
     expiresInSeconds: 300
   });
 });

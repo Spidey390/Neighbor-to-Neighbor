@@ -43,7 +43,7 @@ export default function AuthPage({ onAuthSuccess, onBackToHome, initialTab = "lo
   const [loginOtp, setLoginOtp] = useState("");
   const [loginError, setLoginError] = useState("");
   const [loginOtpSent, setLoginOtpSent] = useState(false);
-  const [loginTwilioWarning, setLoginTwilioWarning] = useState("");
+  const [loginSmsWarning, setLoginSmsWarning] = useState("");
   const [loginFallbackOtp, setLoginFallbackOtp] = useState("");
   const [sendingLoginOtp, setSendingLoginOtp] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -55,7 +55,7 @@ export default function AuthPage({ onAuthSuccess, onBackToHome, initialTab = "lo
   const [signupError, setSignupError] = useState("");
   const [otp, setOtp] = useState("");
   const [signupOtpSent, setSignupOtpSent] = useState(false);
-  const [signupTwilioWarning, setSignupTwilioWarning] = useState("");
+  const [signupSmsWarning, setSignupSmsWarning] = useState("");
   const [signupFallbackOtp, setSignupFallbackOtp] = useState("");
   const [sendingSignupOtp, setSendingSignupOtp] = useState(false);
   const [isSigningUp, setIsSigningUp] = useState(false);
@@ -79,11 +79,11 @@ export default function AuthPage({ onAuthSuccess, onBackToHome, initialTab = "lo
         throw new Error(data.error || "Failed to send OTP.");
       }
       setLoginOtpSent(true);
-      if (data.twilioWarning && data.otpCode) {
-        setLoginTwilioWarning(data.twilioWarning);
+      if (data.smsWarning && data.otpCode) {
+        setLoginSmsWarning(data.smsWarning);
         setLoginFallbackOtp(data.otpCode);
       } else {
-        setLoginTwilioWarning("");
+        setLoginSmsWarning("");
         setLoginFallbackOtp("");
       }
       setLoginOtp("");
@@ -113,11 +113,11 @@ export default function AuthPage({ onAuthSuccess, onBackToHome, initialTab = "lo
         throw new Error(data.error || "Failed to send OTP.");
       }
       setSignupOtpSent(true);
-      if (data.twilioWarning && data.otpCode) {
-        setSignupTwilioWarning(data.twilioWarning);
+      if (data.smsWarning && data.otpCode) {
+        setSignupSmsWarning(data.smsWarning);
         setSignupFallbackOtp(data.otpCode);
       } else {
-        setSignupTwilioWarning("");
+        setSignupSmsWarning("");
         setSignupFallbackOtp("");
       }
       setOtp("");
@@ -339,13 +339,13 @@ export default function AuthPage({ onAuthSuccess, onBackToHome, initialTab = "lo
                   </div>
                 </div>
 
-                {loginOtpSent && !loginTwilioWarning && (
+                {loginOtpSent && !loginSmsWarning && (
                   <p className="text-xs font-semibold text-emerald-700 flex items-center gap-1.5 animate-fade-in mt-1">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                     <span>✓ OTP sent to {loginPhone} — check your messages.</span>
                   </p>
                 )}
-                {loginTwilioWarning && loginFallbackOtp && (
+                {loginSmsWarning && loginFallbackOtp && (
                   <p className="text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-1">
                     💡 No SMS key set — Testing Code: <strong className="font-mono tracking-widest">{loginFallbackOtp}</strong>
                   </p>
@@ -455,25 +455,16 @@ export default function AuthPage({ onAuthSuccess, onBackToHome, initialTab = "lo
                   </div>
                 </div>
 
-                {signupOtpSent && (
-                  <div className="bg-[#edf3ed] border border-[#263c2e]/30 text-[#263c2e] p-3.5 rounded-xl text-xs font-bold space-y-1.5 shadow-2xs animate-fade-in">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse shrink-0"></span>
-                      <span>📱 6-Digit Verification Code Generated for <strong>{signupPhone}</strong></span>
-                    </div>
-                    {signupTwilioWarning ? (
-                      <div className="text-xs font-normal text-amber-950 bg-amber-50 p-2.5 rounded-lg border border-amber-200/80 mt-1 space-y-1">
-                        <p>ℹ️ <strong>Twilio Trial Note:</strong> Twilio Trial accounts only deliver live SMS to numbers verified in your Twilio Console.</p>
-                        <p className="font-bold text-gray-900 pt-0.5">
-                          Verification Code: <span className="font-mono text-sm tracking-widest text-[#263c2e] bg-white px-2 py-0.5 rounded border border-emerald-300">{signupFallbackOtp}</span>
-                        </p>
-                      </div>
-                    ) : (
-                      <p className="text-[11px] font-medium text-emerald-800">
-                        ✓ SMS dispatched to your mobile phone. Please check your messages.
-                      </p>
-                    )}
-                  </div>
+                {signupOtpSent && !signupSmsWarning && (
+                  <p className="text-xs font-semibold text-emerald-700 flex items-center gap-1.5 animate-fade-in mt-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>✓ OTP sent to {signupPhone} — check your messages.</span>
+                  </p>
+                )}
+                {signupSmsWarning && signupFallbackOtp && (
+                  <p className="text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-1">
+                    💡 No SMS key set — Testing Code: <strong className="font-mono tracking-widest">{signupFallbackOtp}</strong>
+                  </p>
                 )}
 
                 {/* 3. Select Role Cards */}
