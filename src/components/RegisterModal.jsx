@@ -169,10 +169,10 @@ export default function RegisterModal({ onClose, onRegisterSuccess }) {
           </div>
 
           {otpSent && (
-            <div className="bg-emerald-50 border border-emerald-300 text-[#263c2e] p-3.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-2xs animate-fade-in">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse shrink-0"></span>
-              <span>📱 6-Digit OTP sent via Twilio SMS to <strong>{phoneNumber}</strong>. Please check your mobile phone!</span>
-            </div>
+            <p className="text-xs font-semibold text-emerald-700 flex items-center gap-1.5 animate-fade-in mt-1">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>✓ OTP sent to {phoneNumber} — check your messages.</span>
+            </p>
           )}
 
           {/* 3. Role Selection */}
