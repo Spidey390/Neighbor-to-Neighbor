@@ -113,6 +113,9 @@ export default function ResidentDashboard({ user, tasks, onReload, onLogout, soc
   const [submittingTask, setSubmittingTask] = useState(false);
   const [submittingRating, setSubmittingRating] = useState(false);
   const [error, setError] = useState("");
+  const [chatOpen, setChatOpen] = useState(false);
+  const [showCall, setShowCall] = useState(false);
+
 
   // AI Request Assistant State
   const [aiPrompt, setAiPrompt] = useState("");
