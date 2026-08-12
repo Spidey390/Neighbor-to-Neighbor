@@ -27,6 +27,12 @@ export default function VideoCall({ socket, taskId, userId, userName, remoteUser
   const pendingCandidatesRef = useRef([]);
   const pendingOfferRef = useRef(null);
   const timerRef = useRef(null);
+  const onCloseRef = useRef(onClose);
+  const callStateRef = useRef(callState);
+
+  // Keep refs in sync with latest props/state without re-running effects
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+  useEffect(() => { callStateRef.current = callState; }, [callState]);
 
   // Format call duration
   const formatDuration = (seconds) => {
@@ -286,10 +292,8 @@ export default function VideoCall({ socket, taskId, userId, userName, remoteUser
     if (!socket || !taskId) return;
 
     const handleIncomingCall = ({ offer, callerName, callerId, mode }) => {
-      // Don't handle our own call offers (shouldn't happen with socket.to(), but just in case)
       if (callerId === userId) return;
-      // Don't interrupt an active call
-      if (callState === "calling" || callState === "connected") return;
+      if (callStateRef.current === "calling" || callStateRef.current === "connected") return;
 
       console.log(`[WebRTC] Incoming call from ${callerName} (${callerId}) for task ${taskId}`);
       pendingOfferRef.current = offer;
@@ -330,7 +334,7 @@ export default function VideoCall({ socket, taskId, userId, userName, remoteUser
       setCallState("ended");
       setTimeout(() => {
         setCallState("idle");
-        if (onClose) onClose();
+        if (onCloseRef.current) onCloseRef.current();
       }, 1500);
     };
 
@@ -348,7 +352,8 @@ export default function VideoCall({ socket, taskId, userId, userName, remoteUser
       socket.off(`call-end-${taskId}`, handleCallEnd);
       console.log(`[VideoCall] Listeners removed for task ${taskId}`);
     };
-  }, [socket, taskId, userId, remoteUserName, callState, cleanup, onClose]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket, taskId, userId, remoteUserName, cleanup]);
 
   // Cleanup on unmount
   useEffect(() => {
